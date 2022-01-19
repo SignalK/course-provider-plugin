@@ -1,0 +1,37 @@
+{
+    "name": "@signalk/course-provider",
+    "version": "1.0.0",
+    "description": "Course data provider plugin for SignalK Server.",
+    "main": "plugin/index.js",
+    "keywords": [
+        "signalk-node-server-plugin",
+        "signalk-category-chart-plotters",
+        "signalk"
+    ],
+    "repository": "https://github.com/@SignalK/course-computer",
+    "author": "AdrianP",
+    "contributors": [
+        {
+            "name": "panaaj@hotmail.com"
+        }
+    ],
+    "license": "Apache-2.0",
+    "scripts": {
+        "build": "tsc",
+        "build-declaration": "tsc --declaration --allowJs false",
+        "watch": "npm run build -- -w",
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "start": "npm run build -- -w",
+        "prepare": "tsc"
+    },
+    "dependencies": {
+        "rxjs": "^7.5.2"
+    },
+    "devDependencies": {
+        "@signalk/server-api": "^1.39.0",
+        "@types/express": "^4.17.8",
+        "@types/node-fetch": "^2.5.6",
+        "typescript": "^4.5.4"
+    },
+    "signalk-plugin-enabled-by-default": true
+}
