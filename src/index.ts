@@ -1,6 +1,7 @@
 import { Plugin, PluginServerApp } from '@signalk/server-api'
 import { Notification, Watcher, WatchEvent } from './lib/alarms'
-import { CourseData, SKPaths,
+import { 
+  CourseData, SKPaths,
   ALARM_METHOD, ALARM_STATE,
   DeltaNotification, DeltaUpdate
 } from './types'
@@ -10,27 +11,18 @@ import { Worker } from 'worker_threads'
 import { Subscription } from 'rxjs'
 
 interface CourseComputerApp extends PluginServerApp {
-  statusMessage?: () => string
   error: (msg: string) => void
   debug: (msg: string) => void
   setPluginStatus: (pluginId: string, status?: string) => void
   setPluginError: (pluginId: string, status?: string) => void
-  setProviderStatus: (providerId: string, status?: string) => void
-  setProviderError: (providerId: string, status?: string) => void
-  getSelfPath: (path: string) => void
   handleMessage: (
     id: string | null,
     msg: DeltaUpdate | DeltaNotification
   ) => void
   config: { configPath: string }
-  streambundle: StreamManager
-}
-
-interface StreamManager {
-  getBus: (path: string | void) => any
-  getSelfBus: (path: string | void) => any
-  getSelfStream: (path: string | void) => any
-  getAvailablePaths: () => string[]
+  streambundle: {
+    getSelfBus: (path: string | void) => any
+  }
 }
 
 const CONFIG_SCHEMA = {
@@ -53,6 +45,7 @@ const SRC_PATHS = [
 const CALC_INTERVAL = 1000
 
 module.exports = (server: CourseComputerApp): Plugin => {
+  
   const watcher: Watcher = new Watcher() // watch distance from arrivalCircle
   let settings: any // ** applied configuration settings
   let baconSub: any[] = [] // stream subscriptions
@@ -174,6 +167,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
     watcher.rangeMax = srcPaths['navigation.course']?.nextPoint?.arrivalCircle ?? -1
     watcher.value = result.gc.nextPoint?.distance ?? -1
     server.handleMessage(plugin.id, buildDeltaMsg(result))
+    server.debug(`** delta sent **`)
   }
 
   const buildDeltaMsg = (course: CourseData): any => {
@@ -302,7 +296,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   // ********* Arrival circle events *****************
 
-  const onChange = (event:WatchEvent) => {
+  const onChange = (event: WatchEvent) => {
     console.log(`** onChange()`)
     if (event.type === 'in') {
       if (srcPaths['navigation.position']) {

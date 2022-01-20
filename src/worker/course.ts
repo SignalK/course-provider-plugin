@@ -2,44 +2,32 @@ import { parentPort } from 'worker_threads'
 import { CourseData, SKPaths } from '../types'
 import { LatLonSpherical as LatLon }  from '../lib/geodesy/latlon-spherical.js'
 
-let staleCounter: number = 0
-const MAX_STALE_COUNT: number = 20
+let activeDest = false
 
-// message from main thread
+// process message from main thread
 parentPort?.on('message', (message: SKPaths) => {
-  let res: CourseData = { gc: {}, rl: {} }
-  if(parseSKPaths(message)) {
-    res = calcs(message)
-    if(res) {
-      parentPort?.postMessage(res)
-    }
+  if (parseSKPaths(message)) {
+    parentPort?.postMessage(calcs(message))
+    activeDest = true
   } else {
-    if(staleCounter > MAX_STALE_COUNT) {
-      // invalidate all result values
-      staleCounter = 0
-      parentPort?.postMessage(res)
+    if (activeDest) {
+      parentPort?.postMessage({ gc: {}, rl: {} })
+      activeDest = false
     }
   }
 })
 
-// validate source data
-function parseSKPaths(src:SKPaths): boolean {
-  if(
+function parseSKPaths(src: SKPaths): boolean {
+  return (
     src['navigation.position'] && 
     src['navigation.course']?.nextPoint?.position &&
     src['navigation.course']?.previousPoint?.position
-  ) {
-    staleCounter = 0
-    return true
-  } else {
-    staleCounter++
-    return false
-  }
+  ) ? true : false
 }
 
-// course calculations
-function toRadians(value:number) { return value * Math.PI / 180 }
+function toRadians(value: number) { return value * Math.PI / 180 }
 
+// course calculations
 function calcs(src: SKPaths): CourseData {
 
   const vesselPosition = src['navigation.position'] ?
@@ -61,8 +49,8 @@ function calcs(src: SKPaths): CourseData {
     )
     : null
   
-  let res: CourseData = { gc: {}, rl: {} }
-  if(!vesselPosition || !destination || !startPoint) {
+  const res: CourseData = { gc: {}, rl: {} }
+  if (!vesselPosition || !destination || !startPoint) {
     return res
   }
  
@@ -134,10 +122,8 @@ function calcs(src: SKPaths): CourseData {
   return res
 }
 
-// ***************************************************
-
 // Velocity Made Good to Course
-function vmg(src:SKPaths, bearingTrue:number): number | null {
+function vmg(src: SKPaths, bearingTrue:number): number | null {
 
   if(
     (typeof src['navigation.headingTrue'] !== 'number') ||
@@ -150,7 +136,11 @@ function vmg(src:SKPaths, bearingTrue:number): number | null {
 }
 
 // Time to Go & Estimated time of arrival at the nextPoint
-function timeCalcs(src:SKPaths, distance:number, vmg:number): {ttg:number | null, eta:string | null} {
+function timeCalcs(
+    src: SKPaths, 
+    distance: number, 
+    vmg: number
+  ): {ttg: number | null, eta: string | null} {
 
   if(typeof distance !== 'number' || !vmg) {
     return {ttg: null, eta: null}
@@ -160,9 +150,9 @@ function timeCalcs(src:SKPaths, distance:number, vmg:number): {ttg:number | null
     new Date(src['navigation.datetime']) :
     new Date()
 
-  let dateMsec: number = date.getTime()
-  let ttgMsec: number = Math.floor((distance / (vmg * 0.514444)) * 1000)
-  let etaMsec: number = dateMsec + ttgMsec
+  let dateMsec = date.getTime()
+  let ttgMsec = Math.floor((distance / (vmg * 0.514444)) * 1000)
+  let etaMsec = dateMsec + ttgMsec
 
   return {
     ttg: ttgMsec /1000, 
