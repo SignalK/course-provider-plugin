@@ -27,10 +27,28 @@ interface CourseComputerApp extends PluginServerApp {
 
 const CONFIG_SCHEMA = {
   properties: {
+    notifications: {
+      type: 'object',
+      title: 'Notifications',
+      description: '',
+      properties: {
+        sound: {
+          type: 'boolean',
+          title: 'Enable sound'
+        }
+      }
+    }
   }
 }
 
 const CONFIG_UISCHEMA = {
+  notifications: {
+    sound: {
+      'ui:widget': 'checkbox',
+      'ui:title': ' ',
+      'ui:help': ''
+    }
+  }
 }
 
 const SRC_PATHS = [
@@ -47,7 +65,6 @@ const CALC_INTERVAL = 1000
 module.exports = (server: CourseComputerApp): Plugin => {
   
   const watcher: Watcher = new Watcher() // watch distance from arrivalCircle
-  let settings: any // ** applied configuration settings
   let baconSub: any[] = [] // stream subscriptions
   let obs: any[] = [] // Observables subscription
   let timer: ReturnType<typeof setTimeout>
@@ -69,12 +86,20 @@ module.exports = (server: CourseComputerApp): Plugin => {
     }
   }
   // ************************************
+
+  let config: any = {
+    notifications: {
+      sound: false
+    }
+  }
+
   const doStartup = (options: any, restart: any) => {
-    settings = options
     try {
-      server.debug('** starting up **')
-      server.debug('*** Configuration ***')
-      server.debug(JSON.stringify(settings))
+      server.debug(`${plugin.name} starting.......`)
+      if (typeof options.notifications?.sound !== 'undefined') {
+        config =  options
+      }
+      server.debug(`Applied config: ${JSON.stringify(config)}`)
 
       // setup subscriptions
       initSubscriptions(SRC_PATHS)
@@ -167,7 +192,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
     watcher.rangeMax = srcPaths['navigation.course']?.nextPoint?.arrivalCircle ?? -1
     watcher.value = result.gc.nextPoint?.distance ?? -1
     server.handleMessage(plugin.id, buildDeltaMsg(result))
-    server.debug(`** delta sent **`)
   }
 
   const buildDeltaMsg = (course: CourseData): any => {
@@ -297,7 +321,9 @@ module.exports = (server: CourseComputerApp): Plugin => {
   // ********* Arrival circle events *****************
 
   const onChange = (event: WatchEvent) => {
-    console.log(`** onChange()`)
+    const alarmMethod = config.notifications.sound ? 
+      [ALARM_METHOD.sound, ALARM_METHOD.visual] :
+      [ALARM_METHOD.visual]
     if (event.type === 'in') {
       if (srcPaths['navigation.position']) {
         emitNotification(
@@ -305,7 +331,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
             'arrivalCircleEntered',
             `Approaching Destination: ${event.value.toFixed(0)}m`,
             ALARM_STATE.warn,
-            [ALARM_METHOD.sound, ALARM_METHOD.visual]
+            alarmMethod
           )
         )
       }
@@ -317,7 +343,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
             'arrivalCircleEntered',
             `Entered arrival zone: ${event.value.toFixed(0)}m < ${watcher.rangeMax.toFixed(0)}`,
             ALARM_STATE.warn,
-            [ALARM_METHOD.sound, ALARM_METHOD.visual]
+            alarmMethod
           )
         )
 
