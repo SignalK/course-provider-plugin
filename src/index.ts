@@ -30,11 +30,26 @@ const CONFIG_SCHEMA = {
     notifications: {
       type: 'object',
       title: 'Notifications',
-      description: '',
+      description: 'Configure the options for generated notifications.',
       properties: {
         sound: {
           type: 'boolean',
           title: 'Enable sound'
+        }
+      }
+    },
+    calculations: {
+      type: 'object',
+      title: 'Calculations',
+      description: 'Configure course calculations options.',
+      properties: {
+        method: {
+          type: "string",
+          default: 'Great Circle',
+          enum: [
+            'Great Circle',
+            'Rhumbline'
+          ]
         }
       }
     }
@@ -48,6 +63,13 @@ const CONFIG_UISCHEMA = {
       'ui:title': ' ',
       'ui:help': ''
     }
+  },
+  calculations: {
+    method: {
+      'ui:widget': 'radio',
+      'ui:title': 'Course calculation method',
+      'ui:help': ' '
+    }
   }
 }
 
@@ -60,15 +82,13 @@ const SRC_PATHS = [
   'navigation.datetime'
 ]
 
-const CALC_INTERVAL = 1000
-
 module.exports = (server: CourseComputerApp): Plugin => {
   
   const watcher: Watcher = new Watcher() // watch distance from arrivalCircle
   let baconSub: any[] = [] // stream subscriptions
   let obs: any[] = [] // Observables subscription
-  let timer: ReturnType<typeof setTimeout>
   let worker: Worker
+  let useRhumbline: boolean;
 
   const srcPaths: SKPaths = {}
 
@@ -78,8 +98,8 @@ module.exports = (server: CourseComputerApp): Plugin => {
     name: 'Course Data provider',
     schema: () => CONFIG_SCHEMA,
     uiSchema: () => CONFIG_UISCHEMA,
-    start: (options: any, restart: any) => {
-      doStartup(options, restart)
+    start: (options: {[key: string]: any}) => {
+      doStartup(options)
     },
     stop: () => {
       doShutdown()
@@ -90,16 +110,24 @@ module.exports = (server: CourseComputerApp): Plugin => {
   let config: any = {
     notifications: {
       sound: false
+    },
+    calculations: {
+      method: 'Great Circle'
     }
   }
 
-  const doStartup = (options: any, restart: any) => {
+  const doStartup = (options: any) => {
     try {
       server.debug(`${plugin.name} starting.......`)
-      if (typeof options.notifications?.sound !== 'undefined') {
+      if (
+        typeof options.notifications?.sound !== 'undefined' &&
+        typeof options.calculations?.method !== 'undefined'
+      ) {
         config =  options
       }
-      server.debug(`Applied config: ${JSON.stringify(config)}`)
+      
+      useRhumbline = config.calculations.method === 'Rhumbline'
+      server.debug(`Applied config: ${JSON.stringify(config)}\n\r useRhumbline= ${useRhumbline}`)
 
       // setup subscriptions
       initSubscriptions(SRC_PATHS)
@@ -108,7 +136,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
       const msg = 'Started'
       server.setPluginStatus(msg)
-      afterStart()
+
     } catch (error) {
       const msg = 'Started with errors!'
       server.setPluginError(msg)
@@ -125,10 +153,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
     baconSub = []
     obs.forEach( (o:Subscription) => o.unsubscribe() )
     obs = []
-    if (timer) {
-      server.debug('** Stopping Timer(s) **')
-      timer.unref()
-    }
     if (worker) {
       server.debug('** Stopping Worker(s) **')
       worker.unref()
@@ -139,7 +163,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   // *****************************************
 
-  // register STREAM UPDATE message handlers
+  // register STREAM UPDATE message handler
   const initSubscriptions = (skPaths: string[]) => {
     skPaths.forEach( (path:string) => {
       baconSub.push(
@@ -147,6 +171,9 @@ module.exports = (server: CourseComputerApp): Plugin => {
           .getSelfBus(path)
           .onValue((v: any) => {
             srcPaths[path] = v.value
+            if (path === 'navigation.position') {
+              calc()
+            }
           })
       )
     })
@@ -172,12 +199,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
     })
   }
 
-  // ** additional plugin start processing
-  const afterStart = () => {
-    // start calculation interval timer
-    timer = setInterval(() => calc(), CALC_INTERVAL)
-  }
-
   // ********* Course Calculations *******************
 
   // trigger course calculations
@@ -187,7 +208,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
     }
   }
 
-  // send calculation result delta
+  // send calculation results delta
   const calcResult = async (result: CourseData) => {
     watcher.rangeMax = srcPaths['navigation.course']?.nextPoint?.arrivalCircle ?? -1
     watcher.value = result.gc.nextPoint?.distance ?? -1
@@ -196,118 +217,66 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   const buildDeltaMsg = (course: CourseData): any => {
     const values: Array<{ path: string; value: any }> = []
-    const courseType = [
-      'navigation.courseGreatCircle',
-      'navigation.courseRhumbline'
-    ]
+
+    const courseType = useRhumbline ? 
+      'navigation.courseRhumbline' :
+      'navigation.courseGreatCircle'
+
+    const source = useRhumbline ? course.rl : course.gc
 
     // Great Circle
     values.push({
-      path: `${courseType[0]}.bearingTrackTrue`,
-      value: (typeof course.gc.bearingTrackTrue === 'undefined') ?
-        null : course.gc.bearingTrackTrue
+      path: `${courseType}.bearingTrackTrue`,
+      value: (typeof source.bearingTrackTrue === 'undefined') ?
+        null : source.bearingTrackTrue
     })
     values.push({
-      path: `${courseType[0]}.bearingTrackMagnetic`,
-      value: (typeof course.gc.bearingTrackMagnetic === 'undefined') ?
-        null : course.gc.bearingTrackMagnetic
+      path: `${courseType}.bearingTrackMagnetic`,
+      value: (typeof source.bearingTrackMagnetic === 'undefined') ?
+        null : source.bearingTrackMagnetic
     })
     values.push({
-      path: `${courseType[0]}.crossTrackError`,
-      value: (typeof course.gc.crossTrackError === 'undefined') ?
-        null : course.gc.crossTrackError
-    })
-
-    values.push({
-      path: `${courseType[0]}.previousPoint.distance`,
-      value: (typeof course.gc.previousPoint?.distance === 'undefined') ?
-        null : course.gc.previousPoint?.distance
+      path: `${courseType}.crossTrackError`,
+      value: (typeof source.crossTrackError === 'undefined') ?
+        null : source.crossTrackError
     })
 
     values.push({
-      path: `${courseType[0]}.nextPoint.distance`,
-      value: (typeof course.gc.nextPoint?.distance === 'undefined') ?
-        null : course.gc.nextPoint?.distance
-    })
-    values.push({
-      path: `${courseType[0]}.nextPoint.bearingTrue`,
-      value: (typeof course.gc.nextPoint?.bearingTrue === 'undefined') ?
-        null : course.gc.nextPoint?.bearingTrue
-    })
-    values.push({
-      path: `${courseType[0]}.nextPoint.bearingMagnetic`,
-      value: (typeof course.gc.nextPoint?.bearingMagnetic === 'undefined') ?
-        null : course.gc.nextPoint?.bearingMagnetic
-    })
-    values.push({
-      path: `${courseType[0]}.nextPoint.velocityMadeGood`,
-      value: (typeof course.gc.nextPoint?.velocityMadeGood === 'undefined') ?
-        null : course.gc.nextPoint?.velocityMadeGood
-    })
-    values.push({
-      path: `${courseType[0]}.nextPoint.timeToGo`,
-      value: (typeof course.gc.nextPoint?.timeToGo === 'undefined') ?
-        null : course.gc.nextPoint?.timeToGo
-    })
-    values.push({
-      path: `${courseType[0]}.nextPoint.estimatedTimeOfArrival`,
-      value: (typeof course.gc.nextPoint?.estimatedTimeOfArrival === 'undefined') ?
-        null : course.gc.nextPoint?.estimatedTimeOfArrival
-    })
-
-    // Rhumbline
-    values.push({
-      path: `${courseType[1]}.bearingTrackTrue`,
-      value: (typeof course.rl.bearingTrackTrue === 'undefined') ?
-        null : course.rl.bearingTrackTrue
-    })
-    values.push({
-      path: `${courseType[1]}.bearingTrackMagnetic`,
-      value: (typeof course.rl.bearingTrackMagnetic === 'undefined') ?
-        null : course.rl.bearingTrackMagnetic
-    })
-    values.push({
-      path: `${courseType[1]}.crossTrackError`,
-      value: (typeof course.rl.bearingTrackMagnetic === 'undefined') ?
-        null : course.rl.bearingTrackMagnetic
+      path: `${courseType}.previousPoint.distance`,
+      value: (typeof source.previousPoint?.distance === 'undefined') ?
+        null : source.previousPoint?.distance
     })
 
     values.push({
-      path: `${courseType[1]}.previousPoint.distance`,
-      value: (typeof course.rl.previousPoint?.distance === 'undefined') ?
-        null : course.rl.previousPoint?.distance
-    })
-
-    values.push({
-      path: `${courseType[1]}.nextPoint.distance`,
-      value: (typeof course.rl.nextPoint?.distance === 'undefined') ?
-        null : course.rl.nextPoint?.distance
+      path: `${courseType}.nextPoint.distance`,
+      value: (typeof source.nextPoint?.distance === 'undefined') ?
+        null : source.nextPoint?.distance
     })
     values.push({
-      path: `${courseType[1]}.nextPoint.bearingTrue`,
-      value: (typeof course.rl.nextPoint?.bearingTrue === 'undefined') ?
-        null : course.rl.nextPoint?.bearingTrue
+      path: `${courseType}.nextPoint.bearingTrue`,
+      value: (typeof source.nextPoint?.bearingTrue === 'undefined') ?
+        null : source.nextPoint?.bearingTrue
     })
     values.push({
-      path: `${courseType[1]}.nextPoint.bearingMagnetic`,
-      value: (typeof course.rl.nextPoint?.bearingMagnetic === 'undefined') ?
-        null : course.rl.nextPoint?.bearingMagnetic
+      path: `${courseType}.nextPoint.bearingMagnetic`,
+      value: (typeof source.nextPoint?.bearingMagnetic === 'undefined') ?
+        null : source.nextPoint?.bearingMagnetic
     })
     values.push({
-      path: `${courseType[1]}.nextPoint.velocityMadeGood`,
-      value: (typeof course.rl.nextPoint?.velocityMadeGood === 'undefined') ?
-        null : course.rl.nextPoint?.velocityMadeGood
+      path: `${courseType}.nextPoint.velocityMadeGood`,
+      value: (typeof source.nextPoint?.velocityMadeGood === 'undefined') ?
+        null : source.nextPoint?.velocityMadeGood
     })
     values.push({
-      path: `${courseType[1]}.nextPoint.timeToGo`,
-      value: (typeof course.rl.nextPoint?.timeToGo === 'undefined') ?
-        null : course.rl.nextPoint?.timeToGo
+      path: `${courseType}.nextPoint.timeToGo`,
+      value: (typeof source.nextPoint?.timeToGo === 'undefined') ?
+        null : source.nextPoint?.timeToGo
     })
     values.push({
-      path: `${courseType[1]}.nextPoint.estimatedTimeOfArrival`,
-      value: (typeof course.rl.nextPoint?.estimatedTimeOfArrival === 'undefined') ?
-        null : course.rl.nextPoint?.estimatedTimeOfArrival
-    })  
+      path: `${courseType}.nextPoint.estimatedTimeOfArrival`,
+      value: (typeof source.nextPoint?.estimatedTimeOfArrival === 'undefined') ?
+        null : source.nextPoint?.estimatedTimeOfArrival
+    })
 
     return {
       updates: [
