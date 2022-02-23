@@ -50,6 +50,10 @@ const CONFIG_SCHEMA = {
             'Great Circle',
             'Rhumbline'
           ]
+        },
+        autopilot: {
+          type: 'boolean',
+          title: 'Emit target heading delta'
         }
       }
     }
@@ -69,6 +73,11 @@ const CONFIG_UISCHEMA = {
       'ui:widget': 'radio',
       'ui:title': 'Course calculation method',
       'ui:help': ' '
+    },
+    autopilot: {
+      'ui:widget': 'checkbox',
+      'ui:title': ' Autopilot',
+      'ui:help': ''
     }
   }
 }
@@ -112,7 +121,8 @@ module.exports = (server: CourseComputerApp): Plugin => {
       sound: false
     },
     calculations: {
-      method: 'Great Circle'
+      method: 'Great Circle',
+      autopilot: false
     }
   }
 
@@ -224,7 +234,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
     const source = useRhumbline ? course.rl : course.gc
 
-    // Great Circle
     values.push({
       path: `${courseType}.bearingTrackTrue`,
       value: (typeof source.bearingTrackTrue === 'undefined') ?
@@ -257,6 +266,13 @@ module.exports = (server: CourseComputerApp): Plugin => {
       value: (typeof source.nextPoint?.bearingTrue === 'undefined') ?
         null : source.nextPoint?.bearingTrue
     })
+    if (config.calculations.autopilot) {
+      values.push({
+        path: `steering.autopilot.target.headingTrue`,
+        value: (typeof source.nextPoint?.bearingTrue === 'undefined') ?
+          null : source.nextPoint?.bearingTrue
+      })
+    }
     values.push({
       path: `${courseType}.nextPoint.bearingMagnetic`,
       value: (typeof source.nextPoint?.bearingMagnetic === 'undefined') ?
