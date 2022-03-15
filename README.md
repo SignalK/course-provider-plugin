@@ -2,12 +2,13 @@
 
 __Signal K server plugin that acts as a Course data provider__.
 
-_Note: This plugin should ONLY be installed on a Signal K server that implements the `Course API`!_
+_Note: This plugin should ONLY be installed on a Signal K server that implements `v2 Course API`!_
 
 ---
 
-This plugin populates the following course data paths found under both `navigation.courseGreatCircle` and `navigation.courseRhumbline`:
+This plugin populates the following course data paths found under `navigation.course.calculations`:
 
+- `calcMethod`
 - `bearingTrackTrue`
 - `bearingTrackMagnetic`
 - `crossTrackError`
@@ -22,6 +23,7 @@ This plugin populates the following course data paths found under both `navigati
 ---
 
 Additionally it will raise notifications when the value of `nextPoint.distance` falls below the value of `nextPoint.arrivalCircle` via the Signal K path __`notifications.navigation.arrivalCircleEntered`__.
+
 
 
 

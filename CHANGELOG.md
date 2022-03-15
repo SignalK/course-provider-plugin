@@ -2,18 +2,18 @@
 
 ## v1.0.0
 
-- Populates the following course data paths:
+- Populates the following course data paths under `navigation.course.calculations`:
 
     - `bearingTrackTrue`
     - `bearingTrackMagnetic`
     - `crossTrackError`
-    - `previousPoint.distance`
-    - `nextPoint.distance`
-    - `nextPoint.bearingTrue`
-    - `nextPoint.bearingMagnetic`
-    - `nextPoint.velocityMadeGood`
-    - `nextPoint.timeToGo`
-    - `nextPoint.estinmatedTimeOfArrival`
+    - `distance`
+    - `distance`
+    - `bearingTrue`
+    - `bearingMagnetic`
+    - `velocityMadeGood`
+    - `timeToGo`
+    - `estinmatedTimeOfArrival`
 
 - Populates the following steering / autopilot paths:
     - `steering.autopilot.target.headingTrue`
@@ -30,8 +30,8 @@
 
 **Calculation method:** Select the course calculation method to use and the paths to populate.
 
-- Great Circle (default): populates values under `navigation.courseGreatCircle` 
-- Rhumbline: populates values under `navigation.courseRhumbline`
+- Great Circle (default): populates values using `GreatCircle` calculations.
+- Rhumbline: populates values using `Rhumbline` calculations.
 
 **Autopilot:**
 - Emit target heading delta: Check to send `steering.autopilot.target.headingTrue` delta messages.

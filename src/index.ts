@@ -15,6 +15,7 @@ interface CourseComputerApp extends PluginServerApp {
   debug: (msg: string) => void
   setPluginStatus: (pluginId: string, status?: string) => void
   setPluginError: (pluginId: string, status?: string) => void
+  getSelfPath: (path: string) => any
   handleMessage: (
     id: string | null,
     msg: DeltaUpdate | DeltaNotification
@@ -97,7 +98,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
   let baconSub: any[] = [] // stream subscriptions
   let obs: any[] = [] // Observables subscription
   let worker: Worker
-  let useRhumbline: boolean;
 
   const srcPaths: SKPaths = {}
 
@@ -135,9 +135,8 @@ module.exports = (server: CourseComputerApp): Plugin => {
       ) {
         config =  options
       }
-      
-      useRhumbline = config.calculations.method === 'Rhumbline'
-      server.debug(`Applied config: ${JSON.stringify(config)}\n\r useRhumbline= ${useRhumbline}`)
+
+      server.debug(`Applied config: ${JSON.stringify(config)}`)
 
       // setup subscriptions
       initSubscriptions(SRC_PATHS)
@@ -175,6 +174,9 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   // register STREAM UPDATE message handler
   const initSubscriptions = (skPaths: string[]) => {
+
+    srcPaths['navigation.course'] = getCourse()
+
     skPaths.forEach( (path:string) => {
       baconSub.push(
         server.streambundle
@@ -211,6 +213,11 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   // ********* Course Calculations *******************
 
+  const getCourse = () => {
+    const { value } = server.getSelfPath('navigation.course')
+    return value ?? null
+  }
+
   // trigger course calculations
   const calc = () => {
     if (srcPaths['navigation.position']) {
@@ -226,43 +233,44 @@ module.exports = (server: CourseComputerApp): Plugin => {
   }
 
   const buildDeltaMsg = (course: CourseData): any => {
+
     const values: Array<{ path: string; value: any }> = []
-
-    const courseType = useRhumbline ? 
-      'navigation.courseRhumbline' :
-      'navigation.courseGreatCircle'
-
-    const source = useRhumbline ? course.rl : course.gc
+    const calcPath = 'navigation.course.calculations'
+    const source = config.calculations.method === 'Rhumbline' ? course.rl : course.gc
 
     values.push({
-      path: `${courseType}.bearingTrackTrue`,
+      path: `${calcPath}.calcMethod`,
+      value: config.calculations.method
+    })
+    values.push({
+      path: `${calcPath}.bearingTrackTrue`,
       value: (typeof source.bearingTrackTrue === 'undefined') ?
         null : source.bearingTrackTrue
     })
     values.push({
-      path: `${courseType}.bearingTrackMagnetic`,
+      path: `${calcPath}.bearingTrackMagnetic`,
       value: (typeof source.bearingTrackMagnetic === 'undefined') ?
         null : source.bearingTrackMagnetic
     })
     values.push({
-      path: `${courseType}.crossTrackError`,
+      path: `${calcPath}.crossTrackError`,
       value: (typeof source.crossTrackError === 'undefined') ?
         null : source.crossTrackError
     })
 
     values.push({
-      path: `${courseType}.previousPoint.distance`,
+      path: `${calcPath}.previousPoint.distance`,
       value: (typeof source.previousPoint?.distance === 'undefined') ?
         null : source.previousPoint?.distance
     })
 
     values.push({
-      path: `${courseType}.nextPoint.distance`,
+      path: `${calcPath}.nextPoint.distance`,
       value: (typeof source.nextPoint?.distance === 'undefined') ?
         null : source.nextPoint?.distance
     })
     values.push({
-      path: `${courseType}.nextPoint.bearingTrue`,
+      path: `${calcPath}.nextPoint.bearingTrue`,
       value: (typeof source.nextPoint?.bearingTrue === 'undefined') ?
         null : source.nextPoint?.bearingTrue
     })
@@ -274,22 +282,22 @@ module.exports = (server: CourseComputerApp): Plugin => {
       })
     }
     values.push({
-      path: `${courseType}.nextPoint.bearingMagnetic`,
+      path: `${calcPath}.nextPoint.bearingMagnetic`,
       value: (typeof source.nextPoint?.bearingMagnetic === 'undefined') ?
         null : source.nextPoint?.bearingMagnetic
     })
     values.push({
-      path: `${courseType}.nextPoint.velocityMadeGood`,
+      path: `${calcPath}.nextPoint.velocityMadeGood`,
       value: (typeof source.nextPoint?.velocityMadeGood === 'undefined') ?
         null : source.nextPoint?.velocityMadeGood
     })
     values.push({
-      path: `${courseType}.nextPoint.timeToGo`,
+      path: `${calcPath}.nextPoint.timeToGo`,
       value: (typeof source.nextPoint?.timeToGo === 'undefined') ?
         null : source.nextPoint?.timeToGo
     })
     values.push({
-      path: `${courseType}.nextPoint.estimatedTimeOfArrival`,
+      path: `${calcPath}.nextPoint.estimatedTimeOfArrival`,
       value: (typeof source.nextPoint?.estimatedTimeOfArrival === 'undefined') ?
         null : source.nextPoint?.estimatedTimeOfArrival
     })
