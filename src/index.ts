@@ -1,4 +1,5 @@
 import { Plugin, PluginServerApp } from '@signalk/server-api'
+import { Application, Request, Response } from 'express'
 import { Notification, Watcher, WatchEvent } from './lib/alarms'
 import { 
   CourseData, SKPaths,
@@ -10,7 +11,9 @@ import path from 'path'
 import { Worker } from 'worker_threads'
 import { Subscription } from 'rxjs'
 
-interface CourseComputerApp extends PluginServerApp {
+interface CourseComputerApp extends 
+  Application, 
+  PluginServerApp {
   error: (msg: string) => void
   debug: (msg: string) => void
   setPluginStatus: (pluginId: string, status?: string) => void
@@ -99,6 +102,9 @@ module.exports = (server: CourseComputerApp): Plugin => {
   let obs: any[] = [] // Observables subscription
   let worker: Worker
 
+  const SIGNALK_API_PATH = `/signalk/v2/api`
+  const COURSE_CALCS_PATH = `${SIGNALK_API_PATH}/vessels/self/navigation/course/calculations`
+
   const srcPaths: SKPaths = {}
 
   // ******** REQUIRED PLUGIN DEFINITION *******
@@ -142,6 +148,9 @@ module.exports = (server: CourseComputerApp): Plugin => {
       initSubscriptions(SRC_PATHS)
       // setup worker(s)
       initWorkers()
+      // setup routes
+      initEndpoints()
+
 
       const msg = 'Started'
       server.setPluginStatus(msg)
@@ -210,6 +219,26 @@ module.exports = (server: CourseComputerApp): Plugin => {
       }
     })
   }
+
+  // initialise api endpoits
+  const initEndpoints = () => {
+    (server).get( `${COURSE_CALCS_PATH}`, async (req: Request, res: Response) => {
+      server.debug(`** GET ${COURSE_CALCS_PATH}`)
+      const calcs = server.getSelfPath(`navigation.course.calculations`)
+
+      if (!calcs) {
+        res.status(400).json({
+          state: 'FAILED',
+          statusCode: 400,
+          message: `No active destination!`
+        })
+        return
+      }
+
+      return res.status(200).json(calcs)
+    })
+  }
+
 
   // ********* Course Calculations *******************
 
