@@ -8,23 +8,23 @@ export interface CourseData {
 }
 
 export interface CourseResult {
-    calcMethod?: string
-    nextPoint?: NextPoint
-    previousPoint?: {
-        distance?: number | null
-    }
-    bearingTrackTrue?: number | null
-    bearingTrackMagnetic?: number | null
-    crossTrackError?: number | null
+  calcMethod?: string
+  nextPoint?: NextPoint
+  previousPoint?: {
+    distance?: number | null
+  }
+  bearingTrackTrue?: number | null
+  bearingTrackMagnetic?: number | null
+  crossTrackError?: number | null
 }
 
 export interface NextPoint {
-    distance?: number | null
-    bearingTrue?: number | null
-    bearingMagnetic?: number | null
-    velocityMadeGood?: number | null
-    timeToGo?: number | null
-    estimatedTimeOfArrival?: string | null
+  distance?: number | null
+  bearingTrue?: number | null
+  bearingMagnetic?: number | null
+  velocityMadeGood?: number | null
+  timeToGo?: number | null
+  estimatedTimeOfArrival?: string | null
 }
 
 // ** Delta Message content**
@@ -64,4 +64,3 @@ export enum ALARM_METHOD {
   visual = 'visual',
   sound = 'sound'
 }
-

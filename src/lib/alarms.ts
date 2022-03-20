@@ -1,10 +1,6 @@
 import { Subject, Observable } from 'rxjs'
 
-import {
-  ALARM_METHOD,
-  ALARM_STATE,
-  DeltaNotification
-} from '../types'
+import { ALARM_METHOD, ALARM_STATE, DeltaNotification } from '../types'
 
 export const STANDARD_ALARMS = [
   'mob',
@@ -61,12 +57,13 @@ export interface WatchEvent {
 
 // ** watch a value within a range (min-max)
 export class Watcher {
-
   private changeSource: Subject<WatchEvent> = new Subject()
   public change$: Observable<WatchEvent> = this.changeSource.asObservable()
 
   set value(val: number) {
-    if (typeof val !== 'number') { return }
+    if (typeof val !== 'number') {
+      return
+    }
     let hasChanged = this._val !== val
     this._val = val
     if (hasChanged) {
@@ -79,24 +76,28 @@ export class Watcher {
   }
 
   set rangeMax(value: number) {
-    if (typeof value !== 'number') { return }
+    if (typeof value !== 'number') {
+      return
+    }
     let hasChanged = this._rangeMax !== value
     this._rangeMax = value
     if (hasChanged) {
       this._setRange()
-    } 
+    }
   }
   get rangeMax(): number {
     return this._rangeMax
   }
 
   set rangeMin(value: number) {
-    if (typeof value !== 'number') { return }
+    if (typeof value !== 'number') {
+      return
+    }
     let hasChanged = this._rangeMin !== value
     this._rangeMin = value
     if (hasChanged) {
       this._setRange()
-    } 
+    }
   }
   get rangeMin(): number {
     return this._rangeMin
@@ -129,13 +130,12 @@ export class Watcher {
       : false
   }
 
-
   private _setValue(val: number) {
     if (this._sampleCount < this._sampleSize) {
       return
     }
     if (typeof val !== 'number') {
-      this.changeSource.next({type: 'exit', value: val})
+      this.changeSource.next({ type: 'exit', value: val })
       return
     }
     let testInRange: boolean = this.isInRange(val)
@@ -143,11 +143,11 @@ export class Watcher {
       // console.log(`** new value is in range`)
       if (this._inRange) {
         //console.log(`** and was already in range`)
-        this.changeSource.next({type: 'in', value: val})
+        this.changeSource.next({ type: 'in', value: val })
       } else {
         // console.log(`** and was previously outside range`)
         this.changeSource.next({
-          type: 'enter', 
+          type: 'enter',
           value: val,
           fromBelow: this._val < this.rangeMin ? true : false
         })
@@ -157,7 +157,7 @@ export class Watcher {
       if (this._inRange) {
         //console.log(`** and was previously in range`)
         this.changeSource.next({
-          type: 'exit', 
+          type: 'exit',
           value: val,
           isBelow: val < this.rangeMin ? true : false
         })
@@ -174,7 +174,7 @@ export class Watcher {
       //console.log(`** value is in new range`)
       if (this._inRange) {
         //console.log(`** and was already in range`)
-        this.changeSource.next({type: 'in', value: this._val})
+        this.changeSource.next({ type: 'in', value: this._val })
       } else {
         //console.log(`** and was previously outside range`)e)
         this.changeSource.next({
@@ -192,8 +192,7 @@ export class Watcher {
           value: this._val,
           isBelow: this._val < this.rangeMin ? true : false
         })
-      }
-      else {
+      } else {
         //console.log(`** and was previously out of range`)
       }
     }
