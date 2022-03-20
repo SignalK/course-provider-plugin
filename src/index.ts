@@ -220,7 +220,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
     })
   }
 
-  // initialise api endpoits
+  // initialise api endpoints
   const initEndpoints = () => {
     (server).get( `${COURSE_CALCS_PATH}`, async (req: Request, res: Response) => {
       server.debug(`** GET ${COURSE_CALCS_PATH}`)
@@ -315,6 +315,14 @@ module.exports = (server: CourseComputerApp): Plugin => {
       value: (typeof source.nextPoint?.bearingMagnetic === 'undefined') ?
         null : source.nextPoint?.bearingMagnetic
     })
+    if (config.calculations.autopilot) {
+      values.push({
+        path: `steering.autopilot.target.bearingMagnetic`,
+        value: (typeof source.nextPoint?.bearingMagnetic === 'undefined') ?
+          null : source.nextPoint?.bearingMagnetic
+      })
+    }
+
     values.push({
       path: `${calcPath}.nextPoint.velocityMadeGood`,
       value: (typeof source.nextPoint?.velocityMadeGood === 'undefined') ?
