@@ -106,6 +106,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
   const COURSE_CALCS_PATH = `${SIGNALK_API_PATH}/vessels/self/navigation/course/calculations`
 
   const srcPaths: SKPaths = {}
+  let courseCalcs: CourseData
 
   // ******** REQUIRED PLUGIN DEFINITION *******
   const plugin: Plugin = {
@@ -224,7 +225,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
   const initEndpoints = () => {
     (server).get( `${COURSE_CALCS_PATH}`, async (req: Request, res: Response) => {
       server.debug(`** GET ${COURSE_CALCS_PATH}`)
-      const calcs = server.getSelfPath(`navigation.course.calculations`)
+      const calcs = config.calculations.method === 'Rhumbline' ? courseCalcs.rl : courseCalcs.gc
 
       if (!calcs) {
         res.status(400).json({
@@ -258,7 +259,8 @@ module.exports = (server: CourseComputerApp): Plugin => {
   const calcResult = async (result: CourseData) => {
     watcher.rangeMax = srcPaths['navigation.course']?.nextPoint?.arrivalCircle ?? -1
     watcher.value = result.gc.nextPoint?.distance ?? -1
-    server.handleMessage(plugin.id, buildDeltaMsg(result))
+    courseCalcs = result
+    server.handleMessage(plugin.id, buildDeltaMsg(courseCalcs as CourseData))
   }
 
   const buildDeltaMsg = (course: CourseData): any => {
@@ -269,7 +271,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
     values.push({
       path: `${calcPath}.calcMethod`,
-      value: config.calculations.method
+      value: source.calcMethod
     })
     values.push({
       path: `${calcPath}.bearingTrackTrue`,

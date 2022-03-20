@@ -72,6 +72,7 @@ function calcs(src: SKPaths): CourseData {
   let gcTime = timeCalcs(src, gcDistance, gcVmg as number)
   
   res.gc = {
+    calcMethod: 'Great Circle',
     bearingTrackTrue: bearingTrackTrue,
     bearingTrackMagnetic: bearingTrackMagnetic,
     crossTrackError: xte,
@@ -104,6 +105,7 @@ function calcs(src: SKPaths): CourseData {
   let rlTime = timeCalcs(src, rlDistance, rlVmg as number)
   
   res.rl = {
+    calcMethod: 'Rhumbline',
     bearingTrackTrue: rlBearingTrackTrue,
     bearingTrackMagnetic: rlBearingTrackMagnetic,
     crossTrackError: xte,

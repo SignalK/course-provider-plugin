@@ -8,6 +8,7 @@ export interface CourseData {
 }
 
 export interface CourseResult {
+    calcMethod?: string
     nextPoint?: NextPoint
     previousPoint?: {
         distance?: number | null
