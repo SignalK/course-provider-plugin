@@ -6,7 +6,7 @@ _Note: This plugin should ONLY be installed on a Signal K server that implements
 
 ---
 
-This plugin populates the following course data paths found under `navigation.course.calculations`:
+This plugin populates the following course data paths found under `navigation.course.calculations` as well as providing an API endpoint at `/signalk/v2/api/vessels/self/navigation/course/calculations`:
 
 - `calcMethod`
 - `bearingTrackTrue`
@@ -19,6 +19,10 @@ This plugin populates the following course data paths found under `navigation.co
 - `nextPoint.velocityMadeGood`
 - `nextPoint.timeToGo`
 - `nextPoint.estinmatedTimeOfArrival`
+
+and optionally (as per settings):
+- `steering.autopilot.target.headingTrue`
+- `steering.autopilot.target.bearingMagnetic`
 
 ---
 
