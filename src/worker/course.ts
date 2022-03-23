@@ -19,8 +19,8 @@ parentPort?.on('message', (message: SKPaths) => {
 
 function parseSKPaths(src: SKPaths): boolean {
   return src['navigation.position'] &&
-    src['navigation.course']?.nextPoint?.position &&
-    src['navigation.course']?.previousPoint?.position
+    src['navigation.course.nextPoint.position'] &&
+    src['navigation.course.previousPoint.position']
     ? true
     : false
 }
@@ -37,16 +37,16 @@ function calcs(src: SKPaths): CourseData {
         src['navigation.position'].longitude
       )
     : null
-  const destination = src['navigation.course'].nextPoint.position
+  const destination = src['navigation.course.nextPoint.position']
     ? new LatLon(
-        src['navigation.course'].nextPoint.position.latitude,
-        src['navigation.course'].nextPoint.position.longitude
+        src['navigation.course.nextPoint.position'].latitude,
+        src['navigation.course.nextPoint.position'].longitude
       )
     : null
-  const startPoint = src['navigation.course'].previousPoint.position
+  const startPoint = src['navigation.course.previousPoint.position']
     ? new LatLon(
-        src['navigation.course'].previousPoint.position.latitude,
-        src['navigation.course'].previousPoint.position.longitude
+        src['navigation.course.previousPoint.position'].latitude,
+        src['navigation.course.previousPoint.position'].longitude
       )
     : null
 

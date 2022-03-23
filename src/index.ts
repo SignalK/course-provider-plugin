@@ -85,7 +85,9 @@ const CONFIG_UISCHEMA = {
 }
 
 const SRC_PATHS = [
-  'navigation.course',
+  'navigation.course.nextPoint.arrivalCircle',
+  'navigation.course.nextPoint.position',
+  'navigation.course.previousPoint.position',
   'navigation.position',
   'navigation.magneticVariation',
   'navigation.headingTrue',
@@ -179,7 +181,8 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   // register STREAM UPDATE message handler
   const initSubscriptions = (skPaths: string[]) => {
-    srcPaths['navigation.course'] = getCourse()
+
+    getCourse()
 
     skPaths.forEach((path: string) => {
       baconSub.push(
@@ -237,14 +240,23 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   // ********* Course Calculations *******************
 
+  // retrieve current course data
   const getCourse = () => {
-    const { value } = server.getSelfPath('navigation.course')
-    return value ?? null
+    [
+      'navigation.position',
+      'navigation.course.nextPoint.position',
+      'navigation.course.previousPoint.position'
+    ].forEach( path => {
+      const v = server.getSelfPath(path)
+      srcPaths[path] = v?.value ?? null
+    })
+    server.debug(`[srcPaths]: ${JSON.stringify(srcPaths)}`)
   }
 
   // trigger course calculations
   const calc = () => {
     if (srcPaths['navigation.position']) {
+      server.debug(`*** do course calculation ***`)
       worker?.postMessage(srcPaths)
     }
   }
@@ -252,7 +264,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
   // send calculation results delta
   const calcResult = async (result: CourseData) => {
     watcher.rangeMax =
-      srcPaths['navigation.course']?.nextPoint?.arrivalCircle ?? -1
+      srcPaths['navigation.course.nextPoint.arrivalCircle'] ?? -1
     watcher.value = result.gc.nextPoint?.distance ?? -1
     courseCalcs = result
     server.handleMessage(plugin.id, buildDeltaMsg(courseCalcs as CourseData))
