@@ -8,7 +8,10 @@
         "signalk-category-chart-plotters",
         "signalk"
     ],
-    "repository": "https://github.com/@SignalK/coursedata-provider-plugin",
+    "repository": {
+        "url": "https://github.com/@SignalK/coursedata-provider-plugin",
+        "type": "git"
+    },
     "author": "AdrianP",
     "contributors": [
         {
