@@ -102,7 +102,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
   let worker: Worker
 
   const SIGNALK_API_PATH = `/signalk/v2/api`
-  const COURSE_CALCS_PATH = `${SIGNALK_API_PATH}/vessels/self/navigation/course/calculations`
+  const COURSE_CALCS_PATH = `${SIGNALK_API_PATH}/vessels/self/navigation/course/calcValues`
 
   const srcPaths: SKPaths = {}
   let courseCalcs: CourseData
@@ -272,7 +272,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   const buildDeltaMsg = (course: CourseData): any => {
     const values: Array<{ path: string; value: any }> = []
-    const calcPath = 'navigation.course.calculations'
+    const calcPath = 'navigation.course.calcValues'
     const source =
       config.calculations.method === 'Rhumbline' ? course.rl : course.gc
 

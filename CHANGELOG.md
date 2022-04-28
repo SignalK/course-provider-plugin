@@ -2,7 +2,7 @@
 
 ## v1.0.0
 
-- Populates the following course data paths under `navigation.course.calculations`:
+- Populates the following course data paths under `navigation.course.calcValues`:
 
     - `bearingTrackTrue`
     - `bearingTrackMagnetic`
