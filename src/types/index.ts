@@ -9,22 +9,18 @@ export interface CourseData {
 
 export interface CourseResult {
   calcMethod?: string
-  nextPoint?: NextPoint
-  previousPoint?: {
-    distance?: number | null
-  }
-  bearingTrackTrue?: number | null
-  bearingTrackMagnetic?: number | null
-  crossTrackError?: number | null
-}
-
-export interface NextPoint {
   distance?: number | null
   bearingTrue?: number | null
   bearingMagnetic?: number | null
   velocityMadeGood?: number | null
   timeToGo?: number | null
   estimatedTimeOfArrival?: string | null
+  previousPoint?: {
+    distance?: number | null
+  }
+  bearingTrackTrue?: number | null
+  bearingTrackMagnetic?: number | null
+  crossTrackError?: number | null
 }
 
 // ** Delta Message content**

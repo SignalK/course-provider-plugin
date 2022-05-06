@@ -79,14 +79,12 @@ function calcs(src: SKPaths): CourseData {
     bearingTrackTrue: bearingTrackTrue,
     bearingTrackMagnetic: bearingTrackMagnetic,
     crossTrackError: xte,
-    nextPoint: {
-      distance: gcDistance,
-      bearingTrue: bearingTrue,
-      bearingMagnetic: bearingMagnetic,
-      velocityMadeGood: gcVmg,
-      timeToGo: gcTime.ttg,
-      estimatedTimeOfArrival: gcTime.eta
-    },
+    distance: gcDistance,
+    bearingTrue: bearingTrue,
+    bearingMagnetic: bearingMagnetic,
+    velocityMadeGood: gcVmg,
+    timeToGo: gcTime.ttg,
+    estimatedTimeOfArrival: gcTime.eta,
     previousPoint: {
       distance: vesselPosition?.distanceTo(startPoint)
     }
@@ -114,14 +112,12 @@ function calcs(src: SKPaths): CourseData {
     bearingTrackTrue: rlBearingTrackTrue,
     bearingTrackMagnetic: rlBearingTrackMagnetic,
     crossTrackError: xte,
-    nextPoint: {
-      distance: rlDistance,
-      bearingTrue: rlBearingTrue,
-      bearingMagnetic: rlBearingMagnetic,
-      velocityMadeGood: rlVmg,
-      timeToGo: rlTime.ttg,
-      estimatedTimeOfArrival: rlTime.eta
-    },
+    distance: rlDistance,
+    bearingTrue: rlBearingTrue,
+    bearingMagnetic: rlBearingMagnetic,
+    velocityMadeGood: rlVmg,
+    timeToGo: rlTime.ttg,
+    estimatedTimeOfArrival: rlTime.eta,
     previousPoint: {
       distance: vesselPosition?.rhumbDistanceTo(startPoint)
     }

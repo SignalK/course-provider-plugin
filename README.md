@@ -13,12 +13,12 @@ This plugin populates the following course data paths found under `navigation.co
 - `bearingTrackMagnetic`
 - `crossTrackError`
 - `previousPoint.distance`
-- `nextPoint.distance`
-- `nextPoint.bearingTrue`
-- `nextPoint.bearingMagnetic`
-- `nextPoint.velocityMadeGood`
-- `nextPoint.timeToGo`
-- `nextPoint.estinmatedTimeOfArrival`
+- `distance`
+- `bearingTrue`
+- `bearingMagnetic`
+- `velocityMadeGood`
+- `timeToGo`
+- `estinmatedTimeOfArrival`
 
 and optionally (as per settings):
 - `steering.autopilot.target.headingTrue`
@@ -26,7 +26,7 @@ and optionally (as per settings):
 
 ---
 
-Additionally it will raise notifications when the value of `nextPoint.distance` falls below the value of `nextPoint.arrivalCircle` via the Signal K path __`notifications.navigation.arrivalCircleEntered`__.
+Additionally it will raise notifications when the value of `distance` falls below the value of `navigation.course.nextPoint.arrivalCircle` via the Signal K path __`notifications.navigation.arrivalCircleEntered`__.
 
 
 

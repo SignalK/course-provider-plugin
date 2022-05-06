@@ -265,7 +265,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
   const calcResult = async (result: CourseData) => {
     watcher.rangeMax =
       srcPaths['navigation.course.nextPoint.arrivalCircle'] ?? -1
-    watcher.value = result.gc.nextPoint?.distance ?? -1
+    watcher.value = result.gc?.distance ?? -1
     courseCalcs = result
     server.handleMessage(plugin.id, buildDeltaMsg(courseCalcs as CourseData))
   }
@@ -311,65 +311,65 @@ module.exports = (server: CourseComputerApp): Plugin => {
     })
 
     values.push({
-      path: `${calcPath}.nextPoint.distance`,
+      path: `${calcPath}.distance`,
       value:
-        typeof source.nextPoint?.distance === 'undefined'
+        typeof source?.distance === 'undefined'
           ? null
-          : source.nextPoint?.distance
+          : source?.distance
     })
     values.push({
-      path: `${calcPath}.nextPoint.bearingTrue`,
+      path: `${calcPath}.bearingTrue`,
       value:
-        typeof source.nextPoint?.bearingTrue === 'undefined'
+        typeof source?.bearingTrue === 'undefined'
           ? null
-          : source.nextPoint?.bearingTrue
+          : source?.bearingTrue
     })
     if (config.calculations.autopilot) {
       values.push({
         path: `steering.autopilot.target.headingTrue`,
         value:
-          typeof source.nextPoint?.bearingTrue === 'undefined'
+          typeof source?.bearingTrue === 'undefined'
             ? null
-            : source.nextPoint?.bearingTrue
+            : source?.bearingTrue
       })
     }
     values.push({
-      path: `${calcPath}.nextPoint.bearingMagnetic`,
+      path: `${calcPath}.bearingMagnetic`,
       value:
-        typeof source.nextPoint?.bearingMagnetic === 'undefined'
+        typeof source?.bearingMagnetic === 'undefined'
           ? null
-          : source.nextPoint?.bearingMagnetic
+          : source?.bearingMagnetic
     })
     if (config.calculations.autopilot) {
       values.push({
         path: `steering.autopilot.target.bearingMagnetic`,
         value:
-          typeof source.nextPoint?.bearingMagnetic === 'undefined'
+          typeof source?.bearingMagnetic === 'undefined'
             ? null
-            : source.nextPoint?.bearingMagnetic
+            : source?.bearingMagnetic
       })
     }
 
     values.push({
-      path: `${calcPath}.nextPoint.velocityMadeGood`,
+      path: `${calcPath}.velocityMadeGood`,
       value:
-        typeof source.nextPoint?.velocityMadeGood === 'undefined'
+        typeof source?.velocityMadeGood === 'undefined'
           ? null
-          : source.nextPoint?.velocityMadeGood
+          : source?.velocityMadeGood
     })
     values.push({
-      path: `${calcPath}.nextPoint.timeToGo`,
+      path: `${calcPath}.timeToGo`,
       value:
-        typeof source.nextPoint?.timeToGo === 'undefined'
+        typeof source?.timeToGo === 'undefined'
           ? null
-          : source.nextPoint?.timeToGo
+          : source?.timeToGo
     })
     values.push({
-      path: `${calcPath}.nextPoint.estimatedTimeOfArrival`,
+      path: `${calcPath}.estimatedTimeOfArrival`,
       value:
-        typeof source.nextPoint?.estimatedTimeOfArrival === 'undefined'
+        typeof source?.estimatedTimeOfArrival === 'undefined'
           ? null
-          : source.nextPoint?.estimatedTimeOfArrival
+          : source?.estimatedTimeOfArrival
     })
 
     return {
