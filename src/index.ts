@@ -222,8 +222,8 @@ module.exports = (server: CourseComputerApp): Plugin => {
       server.debug(`** GET ${COURSE_CALCS_PATH}`)
       const calcs =
         config.calculations.method === 'Rhumbline'
-          ? courseCalcs.rl
-          : courseCalcs.gc
+          ? courseCalcs?.rl
+          : courseCalcs?.gc
 
       if (!calcs) {
         res.status(400).json({
