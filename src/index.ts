@@ -384,6 +384,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
   // ********* Arrival circle events *****************
 
   const onChange = (event: WatchEvent) => {
+    server.debug(JSON.stringify(event))
     const alarmMethod = config.notifications.sound
       ? [ALARM_METHOD.sound, ALARM_METHOD.visual]
       : [ALARM_METHOD.visual]
@@ -391,7 +392,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
       if (srcPaths['navigation.position']) {
         emitNotification(
           new Notification(
-            'arrivalCircleEntered',
+            'navigation.course.arrivalCircleEntered',
             `Approaching Destination: ${event.value.toFixed(0)}m`,
             ALARM_STATE.warn,
             alarmMethod
@@ -403,7 +404,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
       if (srcPaths['navigation.position']) {
         emitNotification(
           new Notification(
-            'arrivalCircleEntered',
+            'navigation.course.arrivalCircleEntered',
             `Entered arrival zone: ${event.value.toFixed(
               0
             )}m < ${watcher.rangeMax.toFixed(0)}`,
@@ -416,7 +417,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
     if (event.type === 'exit') {
       emitNotification(
         new Notification(
-          'arrivalCircleEntered',
+          'navigation.course.arrivalCircleEntered',
           `Entered arrival zone: ${event.value.toFixed(
             0
           )}m > (${watcher.rangeMax.toFixed(0)})`,
@@ -425,10 +426,12 @@ module.exports = (server: CourseComputerApp): Plugin => {
         )
       )
     }
-  }
 
-  // ** send notification delta message **
+  }
+  
+  // send notification delta message
   const emitNotification = (notification: Notification) => {
+    server.debug(JSON.stringify(notification.message))
     server.handleMessage(plugin.id, {
       updates: [{ values: [notification.message] }]
     })
