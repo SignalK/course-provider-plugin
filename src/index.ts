@@ -206,7 +206,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
       watchPassedDest.change$.subscribe((event: WatchEvent) => {
         onPassedDestEvent(event)
       })
-    )    
+    )
   }
 
   // initialise calculation worker(s)
@@ -401,14 +401,11 @@ module.exports = (server: CourseComputerApp): Plugin => {
     }
     if (event.type === 'exit') {
       emitNotification(
-        new Notification(
-          'navigation.course.arrivalCircleEntered',
-          null
-        )
+        new Notification('navigation.course.arrivalCircleEntered', null)
       )
     }
   }
-     
+
   // ********* Passed Destination events *****************
   const onPassedDestEvent = (event: WatchEvent) => {
     server.debug(JSON.stringify(event))
@@ -426,10 +423,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
     }
     if (event.type === 'exit') {
       emitNotification(
-        new Notification(
-          'navigation.course.perpendicularPassed',
-          null
-        )
+        new Notification('navigation.course.perpendicularPassed', null)
       )
     }
   }

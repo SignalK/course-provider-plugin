@@ -24,14 +24,16 @@ export class Notification {
     state: ALARM_STATE = ALARM_STATE.alert,
     method: ALARM_METHOD[] = [ALARM_METHOD.sound, ALARM_METHOD.visual]
   ) {
-
     this._message = {
       path: `notifications.${path}`,
-      value: typeof msg === 'string' ? {
-        state: state,
-        method: method,
-        message: msg
-      } : null
+      value:
+        typeof msg === 'string'
+          ? {
+              state: state,
+              method: method,
+              message: msg
+            }
+          : null
     }
   }
 
@@ -125,8 +127,6 @@ export class Watcher {
   }
 
   private _setValue(val: number) {
-    console.log(`** new value:`, val)
-    console.log(`** _sampleCount:`, this._sampleCount, this._sampleSize)
     if (this._sampleCount < this._sampleSize) {
       return
     }
@@ -135,14 +135,14 @@ export class Watcher {
       return
     }
     let testInRange: boolean = this.isInRange(val)
-    console.log(`** testInRange:`, testInRange, this.rangeMin, this.rangeMax)
+
     if (testInRange) {
-      console.log(`** new value is in range`)
+      //console.log(`** new value is in range`)
       if (this._inRange) {
-        console.log(`** and was already in range`)
+        //console.log(`** and was already in range`)
         this.changeSource.next({ type: 'in', value: val })
       } else {
-        console.log(`** and was previously outside range`)
+        //console.log(`** and was previously outside range`)
         this.changeSource.next({
           type: 'enter',
           value: val,
