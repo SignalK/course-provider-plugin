@@ -96,7 +96,10 @@ const SRC_PATHS = [
 ]
 
 module.exports = (server: CourseComputerApp): Plugin => {
-  const watcher: Watcher = new Watcher() // watch distance from arrivalCircle
+  const watchArrival: Watcher = new Watcher() // watch distance from arrivalCircle
+  const watchPassedDest: Watcher = new Watcher() // watch passedPerpendicular
+  watchPassedDest.rangeMin = 1
+  watchPassedDest.rangeMax = 2
   let baconSub: any[] = [] // stream subscriptions
   let obs: any[] = [] // Observables subscription
   let worker: Worker
@@ -181,8 +184,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   // register STREAM UPDATE message handler
   const initSubscriptions = (skPaths: string[]) => {
-
-    getCourse()
+    getPaths(skPaths)
 
     skPaths.forEach((path: string) => {
       baconSub.push(
@@ -196,10 +198,15 @@ module.exports = (server: CourseComputerApp): Plugin => {
     })
 
     obs.push(
-      watcher.change$.subscribe((event: WatchEvent) => {
-        onChange(event)
+      watchArrival.change$.subscribe((event: WatchEvent) => {
+        onArrivalCircleEvent(event)
       })
     )
+    obs.push(
+      watchPassedDest.change$.subscribe((event: WatchEvent) => {
+        onPassedDestEvent(event)
+      })
+    )    
   }
 
   // initialise calculation worker(s)
@@ -240,13 +247,9 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   // ********* Course Calculations *******************
 
-  // retrieve current course data
-  const getCourse = () => {
-    [
-      'navigation.position',
-      'navigation.course.nextPoint.position',
-      'navigation.course.previousPoint.position'
-    ].forEach( path => {
+  // retrieve initial values of target paths
+  const getPaths = (paths: string[]) => {
+    paths.forEach((path) => {
       const v = server.getSelfPath(path)
       srcPaths[path] = v?.value ?? null
     })
@@ -263,9 +266,10 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   // send calculation results delta
   const calcResult = async (result: CourseData) => {
-    watcher.rangeMax =
+    watchArrival.rangeMax =
       srcPaths['navigation.course.nextPoint.arrivalCircle'] ?? -1
-    watcher.value = result.gc?.distance ?? -1
+    watchArrival.value = result.gc?.distance ?? -1
+    watchPassedDest.value = result.passedPerpendicular ? 1 : 0
     courseCalcs = result
     server.handleMessage(plugin.id, buildDeltaMsg(courseCalcs as CourseData))
   }
@@ -312,17 +316,12 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
     values.push({
       path: `${calcPath}.distance`,
-      value:
-        typeof source?.distance === 'undefined'
-          ? null
-          : source?.distance
+      value: typeof source?.distance === 'undefined' ? null : source?.distance
     })
     values.push({
       path: `${calcPath}.bearingTrue`,
       value:
-        typeof source?.bearingTrue === 'undefined'
-          ? null
-          : source?.bearingTrue
+        typeof source?.bearingTrue === 'undefined' ? null : source?.bearingTrue
     })
     if (config.calculations.autopilot) {
       values.push({
@@ -359,10 +358,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
     })
     values.push({
       path: `${calcPath}.timeToGo`,
-      value:
-        typeof source?.timeToGo === 'undefined'
-          ? null
-          : source?.timeToGo
+      value: typeof source?.timeToGo === 'undefined' ? null : source?.timeToGo
     })
     values.push({
       path: `${calcPath}.estimatedTimeOfArrival`,
@@ -383,23 +379,12 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   // ********* Arrival circle events *****************
 
-  const onChange = (event: WatchEvent) => {
+  const onArrivalCircleEvent = (event: WatchEvent) => {
     server.debug(JSON.stringify(event))
     const alarmMethod = config.notifications.sound
       ? [ALARM_METHOD.sound, ALARM_METHOD.visual]
       : [ALARM_METHOD.visual]
-    if (event.type === 'in') {
-      if (srcPaths['navigation.position']) {
-        emitNotification(
-          new Notification(
-            'navigation.course.arrivalCircleEntered',
-            `Approaching Destination: ${event.value.toFixed(0)}m`,
-            ALARM_STATE.warn,
-            alarmMethod
-          )
-        )
-      }
-    }
+
     if (event.type === 'enter') {
       if (srcPaths['navigation.position']) {
         emitNotification(
@@ -407,8 +392,8 @@ module.exports = (server: CourseComputerApp): Plugin => {
             'navigation.course.arrivalCircleEntered',
             `Entered arrival zone: ${event.value.toFixed(
               0
-            )}m < ${watcher.rangeMax.toFixed(0)}`,
-            ALARM_STATE.warn,
+            )}m < ${watchArrival.rangeMax.toFixed(0)}`,
+            ALARM_STATE.alert,
             alarmMethod
           )
         )
@@ -418,20 +403,40 @@ module.exports = (server: CourseComputerApp): Plugin => {
       emitNotification(
         new Notification(
           'navigation.course.arrivalCircleEntered',
-          `Entered arrival zone: ${event.value.toFixed(
-            0
-          )}m > (${watcher.rangeMax.toFixed(0)})`,
-          ALARM_STATE.normal,
-          []
+          null
         )
       )
     }
-
   }
-  
+     
+  // ********* Passed Destination events *****************
+  const onPassedDestEvent = (event: WatchEvent) => {
+    server.debug(JSON.stringify(event))
+    if (event.type === 'enter') {
+      if (srcPaths['navigation.position']) {
+        emitNotification(
+          new Notification(
+            'navigation.course.perpendicularPassed',
+            watchPassedDest.value.toString(),
+            ALARM_STATE.alert,
+            []
+          )
+        )
+      }
+    }
+    if (event.type === 'exit') {
+      emitNotification(
+        new Notification(
+          'navigation.course.perpendicularPassed',
+          null
+        )
+      )
+    }
+  }
+
   // send notification delta message
   const emitNotification = (notification: Notification) => {
-    server.debug(JSON.stringify(notification.message))
+    server.debug(JSON.stringify(notification?.message))
     server.handleMessage(plugin.id, {
       updates: [{ values: [notification.message] }]
     })

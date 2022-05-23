@@ -50,7 +50,7 @@ function calcs(src: SKPaths): CourseData {
       )
     : null
 
-  const res: CourseData = { gc: {}, rl: {} }
+  const res: CourseData = { gc: {}, rl: {}, passedPerpendicular: false }
   if (!vesselPosition || !destination || !startPoint) {
     return res
   }
@@ -122,6 +122,14 @@ function calcs(src: SKPaths): CourseData {
       distance: vesselPosition?.rhumbDistanceTo(startPoint)
     }
   }
+
+  // passed destination perpendicular
+  res.passedPerpendicular = passedPerpendicular(
+    vesselPosition,
+    destination,
+    startPoint
+  )
+
   return res
 }
 
@@ -162,4 +170,49 @@ function timeCalcs(
     ttg: ttgMsec / 1000,
     eta: new Date(etaMsec).toISOString()
   }
+}
+
+// return true if vessel is past perpendicular of destination
+function passedPerpendicular(
+  vesselPosition: LatLon,
+  destination: LatLon,
+  startPoint: LatLon
+): boolean {
+  const va = toVector(destination, vesselPosition)
+  const vb = toVector(destination, startPoint)
+  const rad = Math.acos((va.x * vb.x + va.y * vb.y) / (va.length * vb.length))
+  const deg = (180 / Math.PI) * rad
+  return deg > 90 ? true : false
+}
+
+interface Vector {
+  x: number
+  y: number
+  length: number
+}
+
+function toVector(origin: LatLon, end: LatLon): Vector {
+  // calc longitudinal difference (inc dateline transition)
+  function xDiff(a: number, b: number): number {
+    let bx: number
+    if (a > 170 && b < 0) {
+      // E->W transition
+      bx = a + (180 - a) + (180 + b)
+    } else if (a < -170 && b > 0) {
+      // W->E transition
+      bx = a - (180 + a) - (180 - b)
+    } else {
+      bx = b
+    }
+    return bx - a
+  }
+
+  const x = xDiff(origin.longitude, end.longitude)
+  const y = end.latitude - origin.latitude
+  const v: Vector = {
+    x: x,
+    y: y,
+    length: Math.sqrt(Math.pow(x, 2) + Math.pow(y, 2))
+  }
+  return v
 }

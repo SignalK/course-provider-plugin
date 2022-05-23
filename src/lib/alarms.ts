@@ -16,28 +16,22 @@ export const STANDARD_ALARMS = [
 ]
 
 export class Notification {
-  private _message: DeltaNotification = {
-    path: `notifications.`,
-    value: {
-      state: ALARM_STATE.alarm,
-      method: [ALARM_METHOD.sound, ALARM_METHOD.visual],
-      message: 'Alarm!'
-    }
-  }
+  private _message: DeltaNotification
 
   constructor(
     path: string,
-    msg: string,
-    state?: ALARM_STATE,
-    method?: ALARM_METHOD[]
+    msg: string | null,
+    state: ALARM_STATE = ALARM_STATE.alert,
+    method: ALARM_METHOD[] = [ALARM_METHOD.sound, ALARM_METHOD.visual]
   ) {
-    this._message.path += path
-    this._message.value.message = msg
-    if (state) {
-      this._message.value.state = state
-    }
-    if (method) {
-      this._message.value.method = method
+
+    this._message = {
+      path: `notifications.${path}`,
+      value: typeof msg === 'string' ? {
+        state: state,
+        method: method,
+        message: msg
+      } : null
     }
   }
 
@@ -59,6 +53,16 @@ export interface WatchEvent {
 export class Watcher {
   private changeSource: Subject<WatchEvent> = new Subject()
   public change$: Observable<WatchEvent> = this.changeSource.asObservable()
+
+  private _rangeMin = 0
+  private _rangeMax = 100
+  private _sampleCount = 0 // number of values sampled
+  private _sampleSize = 1 // number of values to sample before range test
+  private _val: number = -1
+  private _inRange: boolean = false
+  private _firstChange: boolean = true
+
+  constructor() {}
 
   set value(val: number) {
     if (typeof val !== 'number') {
@@ -112,16 +116,6 @@ export class Watcher {
     return this._sampleSize
   }
 
-  private _rangeMin = 0
-  private _rangeMax = 100
-  private _sampleCount = 0 // number of values sampled
-  private _sampleSize = 1 // number of values to sample before range test
-  private _val = -1
-
-  private _inRange: boolean = false
-
-  constructor() {}
-
   isInRange(value: number = this._val): boolean {
     return typeof value == 'number' &&
       value <= this.rangeMax &&
@@ -131,6 +125,8 @@ export class Watcher {
   }
 
   private _setValue(val: number) {
+    console.log(`** new value:`, val)
+    console.log(`** _sampleCount:`, this._sampleCount, this._sampleSize)
     if (this._sampleCount < this._sampleSize) {
       return
     }
@@ -139,13 +135,14 @@ export class Watcher {
       return
     }
     let testInRange: boolean = this.isInRange(val)
+    console.log(`** testInRange:`, testInRange, this.rangeMin, this.rangeMax)
     if (testInRange) {
-      // console.log(`** new value is in range`)
+      console.log(`** new value is in range`)
       if (this._inRange) {
-        //console.log(`** and was already in range`)
+        console.log(`** and was already in range`)
         this.changeSource.next({ type: 'in', value: val })
       } else {
-        // console.log(`** and was previously outside range`)
+        console.log(`** and was previously outside range`)
         this.changeSource.next({
           type: 'enter',
           value: val,

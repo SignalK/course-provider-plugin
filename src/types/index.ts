@@ -5,6 +5,7 @@ export interface SKPaths {
 export interface CourseData {
   gc: CourseResult
   rl: CourseResult
+  passedPerpendicular: boolean
 }
 
 export interface CourseResult {
@@ -38,13 +39,15 @@ export interface DeltaUpdate {
   ]
 }
 
+interface AlarmValue {
+  state: ALARM_STATE
+  method: ALARM_METHOD[]
+  message: string
+}
+
 // ** Notification Message **
 export interface DeltaNotification extends DeltaValue {
-  value: {
-    state: ALARM_STATE
-    method: ALARM_METHOD[]
-    message: string
-  }
+  value: AlarmValue | null
 }
 
 export enum ALARM_STATE {
