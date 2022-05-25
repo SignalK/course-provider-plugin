@@ -62,7 +62,6 @@ export class Watcher {
   private _sampleSize = 1 // number of values to sample before range test
   private _val: number = -1
   private _inRange: boolean = false
-  private _firstChange: boolean = true
 
   constructor() {}
 

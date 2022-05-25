@@ -15,23 +15,11 @@
     - `timeToGo`
     - `estinmatedTimeOfArrival`
 
-- Populates the following steering / autopilot paths:
-    - `steering.autopilot.target.headingTrue`
-
 - Raises / clears the following notifications:
     - `notifications.navigation.arrivalCircleEntered`
+    - `notifications.navigation.perpendicularPassed`
+
+- Optionally (as per configuration) populate the following steering / autopilot path(s):
+    - `steering.autopilot.target.headingTrue`
 
 
-### Configuration
----
-**Notifications:** provides configuration for generated notifications.
-
-- **Enable sound:** Checking this option sets the `sound` flag for any notifications generated.
-
-**Calculation method:** Select the course calculation method to use and the paths to populate.
-
-- Great Circle (default): populates values using `GreatCircle` calculations.
-- Rhumbline: populates values using `Rhumbline` calculations.
-
-**Autopilot:**
-- Emit target heading delta: Check to send `steering.autopilot.target.headingTrue` delta messages.
