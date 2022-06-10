@@ -22,6 +22,7 @@ export interface CourseResult {
   bearingTrackTrue?: number | null
   bearingTrackMagnetic?: number | null
   crossTrackError?: number | null
+  targetSpeed?: number | null
 }
 
 // ** Delta Message content**

@@ -18,7 +18,8 @@ This plugin populates the following course data paths found under `navigation.co
 - `bearingMagnetic`
 - `velocityMadeGood`
 - `timeToGo`
-- `estinmatedTimeOfArrival`
+- `estimatedTimeOfArrival`
+- `targetSpeed`
 
 and optionally (as per settings):
 - `steering.autopilot.target.headingTrue`

@@ -13,7 +13,8 @@
     - `bearingMagnetic`
     - `velocityMadeGood`
     - `timeToGo`
-    - `estinmatedTimeOfArrival`
+    - `estimatedTimeOfArrival`
+    - `targetSpeed`
 
 - Raises / clears the following notifications:
     - `notifications.navigation.arrivalCircleEntered`

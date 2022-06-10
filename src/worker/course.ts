@@ -55,11 +55,11 @@ function calcs(src: SKPaths): CourseData {
     return res
   }
 
-  let xte = vesselPosition?.crossTrackDistanceTo(startPoint, destination)
+  const xte = vesselPosition?.crossTrackDistanceTo(startPoint, destination)
 
   // Great Circle
-  let bearingTrackTrue = toRadians(startPoint?.initialBearingTo(destination))
-  let bearingTrue = toRadians(vesselPosition?.initialBearingTo(destination))
+  const bearingTrackTrue = toRadians(startPoint?.initialBearingTo(destination))
+  const bearingTrue = toRadians(vesselPosition?.initialBearingTo(destination))
   let bearingTrackMagnetic: number | null = null
   let bearingMagnetic: number | null = null
 
@@ -70,9 +70,9 @@ function calcs(src: SKPaths): CourseData {
       (bearingTrue as number) - src['navigation.magneticVariation']
   }
 
-  let gcDistance = vesselPosition?.distanceTo(destination)
-  let gcVmg = vmg(src, bearingTrue)
-  let gcTime = timeCalcs(src, gcDistance, gcVmg as number)
+  const gcDistance = vesselPosition?.distanceTo(destination)
+  const gcVmg = vmg(src, bearingTrue)
+  const gcTime = timeCalcs(src, gcDistance, gcVmg as number)
 
   res.gc = {
     calcMethod: 'Great Circle',
@@ -87,12 +87,13 @@ function calcs(src: SKPaths): CourseData {
     estimatedTimeOfArrival: gcTime.eta,
     previousPoint: {
       distance: vesselPosition?.distanceTo(startPoint)
-    }
+    },
+    targetSpeed: targetSpeed(src, gcDistance)
   }
 
   // Rhumbline
-  let rlBearingTrackTrue = toRadians(startPoint?.rhumbBearingTo(destination))
-  let rlBearingTrue = toRadians(vesselPosition?.rhumbBearingTo(destination))
+  const rlBearingTrackTrue = toRadians(startPoint?.rhumbBearingTo(destination))
+  const rlBearingTrue = toRadians(vesselPosition?.rhumbBearingTo(destination))
   let rlBearingTrackMagnetic: number | null = null
   let rlBearingMagnetic: number | null = null
 
@@ -103,9 +104,9 @@ function calcs(src: SKPaths): CourseData {
       (rlBearingTrue as number) - src['navigation.magneticVariation']
   }
 
-  let rlDistance = vesselPosition?.rhumbDistanceTo(destination)
-  let rlVmg = vmg(src, rlBearingTrue)
-  let rlTime = timeCalcs(src, rlDistance, rlVmg as number)
+  const rlDistance = vesselPosition?.rhumbDistanceTo(destination)
+  const rlVmg = vmg(src, rlBearingTrue)
+  const rlTime = timeCalcs(src, rlDistance, rlVmg as number)
 
   res.rl = {
     calcMethod: 'Rhumbline',
@@ -120,7 +121,8 @@ function calcs(src: SKPaths): CourseData {
     estimatedTimeOfArrival: rlTime.eta,
     previousPoint: {
       distance: vesselPosition?.rhumbDistanceTo(startPoint)
-    }
+    },
+    targetSpeed: targetSpeed(src, rlDistance)
   }
 
   // passed destination perpendicular
@@ -158,18 +160,40 @@ function timeCalcs(
     return { ttg: null, eta: null }
   }
 
-  let date: Date = src['navigation.datetime']
+  const date: Date = src['navigation.datetime']
     ? new Date(src['navigation.datetime'])
     : new Date()
 
-  let dateMsec = date.getTime()
-  let ttgMsec = Math.floor((distance / (vmg * 0.514444)) * 1000)
-  let etaMsec = dateMsec + ttgMsec
+  const dateMsec = date.getTime()
+  const ttgMsec = Math.floor((distance / (vmg * 0.514444)) * 1000)
+  const etaMsec = dateMsec + ttgMsec
 
   return {
     ttg: ttgMsec / 1000,
     eta: new Date(etaMsec).toISOString()
   }
+}
+
+// Avg speed required to arrive at destinationa at targetArrivalTime
+function targetSpeed(
+  src: SKPaths,
+  distance: number,
+): number | null {
+
+  if (typeof distance !== 'number' || !src['navigation.course.targetArrivalTime']) {
+    return null
+  }
+  const date: Date = src['navigation.datetime']
+    ? new Date(src['navigation.datetime'])
+    : new Date()
+  const dateMsec = date.getTime()
+  const tat = new Date(src['navigation.course.targetArrivalTime'])
+  const tatMsec = tat.getTime()
+  if (tatMsec <= dateMsec) { // current time is after targetArrivalTime
+    return null
+  }
+  const tDiffSec = (tatMsec - dateMsec) / 1000
+  return distance / tDiffSec
 }
 
 // return true if vessel is past perpendicular of destination

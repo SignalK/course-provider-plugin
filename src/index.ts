@@ -92,7 +92,8 @@ const SRC_PATHS = [
   'navigation.magneticVariation',
   'navigation.headingTrue',
   'navigation.speedOverGround',
-  'navigation.datetime'
+  'navigation.datetime',
+  'navigation.course.targetArrivalTime'
 ]
 
 module.exports = (server: CourseComputerApp): Plugin => {
@@ -366,6 +367,13 @@ module.exports = (server: CourseComputerApp): Plugin => {
         typeof source?.estimatedTimeOfArrival === 'undefined'
           ? null
           : source?.estimatedTimeOfArrival
+    })
+    values.push({
+      path: `${calcPath}.targetSpeed`,
+      value:
+        typeof source?.targetSpeed === 'undefined'
+          ? null
+          : source?.targetSpeed
     })
 
     return {
