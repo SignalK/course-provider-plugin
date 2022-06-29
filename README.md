@@ -40,7 +40,7 @@ Additionally it will raise the following notification:
 
 **Calculation method:** Select the course calculation method to use and the paths to populate.
 
-- **Great Circle (default)**: populates values using _GreatCircle_ calculations.
+- **GreatCircle (default)**: populates values using _GreatCircle_ calculations.
 - **Rhumbline**: populates values using _Rhumbline_ calculations.
 
 **Autopilot:**

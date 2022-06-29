@@ -50,8 +50,8 @@ const CONFIG_SCHEMA = {
       properties: {
         method: {
           type: 'string',
-          default: 'Great Circle',
-          enum: ['Great Circle', 'Rhumbline']
+          default: 'GreatCircle',
+          enum: ['GreatCircle', 'Rhumbline']
         },
         autopilot: {
           type: 'boolean',
@@ -93,7 +93,10 @@ const SRC_PATHS = [
   'navigation.headingTrue',
   'navigation.speedOverGround',
   'navigation.datetime',
-  'navigation.course.targetArrivalTime'
+  'navigation.course.targetArrivalTime',
+  'navigation.course.activeRoute.waypoints',
+  'navigation.course.activeRoute.pointIndex',
+  'navigation.course.activeRoute.reverse'
 ]
 
 module.exports = (server: CourseComputerApp): Plugin => {
@@ -131,7 +134,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
       sound: false
     },
     calculations: {
-      method: 'Great Circle',
+      method: 'GreatCircle',
       autopilot: false
     }
   }
@@ -371,9 +374,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
     values.push({
       path: `${calcPath}.targetSpeed`,
       value:
-        typeof source?.targetSpeed === 'undefined'
-          ? null
-          : source?.targetSpeed
+        typeof source?.targetSpeed === 'undefined' ? null : source?.targetSpeed
     })
 
     return {

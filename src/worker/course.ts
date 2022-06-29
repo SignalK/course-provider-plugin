@@ -57,7 +57,7 @@ function calcs(src: SKPaths): CourseData {
 
   const xte = vesselPosition?.crossTrackDistanceTo(startPoint, destination)
 
-  // Great Circle
+  // GreatCircle
   const bearingTrackTrue = toRadians(startPoint?.initialBearingTo(destination))
   const bearingTrue = toRadians(vesselPosition?.initialBearingTo(destination))
   let bearingTrackMagnetic: number | null = null
@@ -75,7 +75,7 @@ function calcs(src: SKPaths): CourseData {
   const gcTime = timeCalcs(src, gcDistance, gcVmg as number)
 
   res.gc = {
-    calcMethod: 'Great Circle',
+    calcMethod: 'GreatCircle',
     bearingTrackTrue: bearingTrackTrue,
     bearingTrackMagnetic: bearingTrackMagnetic,
     crossTrackError: xte,
@@ -122,7 +122,7 @@ function calcs(src: SKPaths): CourseData {
     previousPoint: {
       distance: vesselPosition?.rhumbDistanceTo(startPoint)
     },
-    targetSpeed: targetSpeed(src, rlDistance)
+    targetSpeed: targetSpeed(src, rlDistance, true)
   }
 
   // passed destination perpendicular
@@ -178,22 +178,92 @@ function timeCalcs(
 function targetSpeed(
   src: SKPaths,
   distance: number,
+  rhumbLine?: boolean
 ): number | null {
-
-  if (typeof distance !== 'number' || !src['navigation.course.targetArrivalTime']) {
+  if (
+    typeof distance !== 'number' ||
+    !src['navigation.course.targetArrivalTime']
+  ) {
     return null
   }
+
+  // if route totalDistance = distance plus + length of remaining route segments
+  if (src['navigation.course.activeRoute.waypoints']) {
+    distance += routeRemaining(src, rhumbLine)
+  }
+
   const date: Date = src['navigation.datetime']
     ? new Date(src['navigation.datetime'])
     : new Date()
   const dateMsec = date.getTime()
   const tat = new Date(src['navigation.course.targetArrivalTime'])
   const tatMsec = tat.getTime()
-  if (tatMsec <= dateMsec) { // current time is after targetArrivalTime
+  if (tatMsec <= dateMsec) {
+    // current time is after targetArrivalTime
     return null
   }
   const tDiffSec = (tatMsec - dateMsec) / 1000
   return distance / tDiffSec
+}
+
+// total distance in meters of remaining route segments
+function routeRemaining(src: SKPaths, rhumbLine?: boolean): number {
+  if (
+    src['navigation.course.activeRoute.pointIndex'] === null ||
+    !src['navigation.course.activeRoute.waypoints'] ||
+    !Array.isArray(src['navigation.course.activeRoute.waypoints'])
+  ) {
+    return 0
+  }
+  if (src['navigation.course.activeRoute.waypoints'].length < 2) {
+    return 0
+  }
+  let reverse = src['navigation.course.activeRoute.reverse']
+  let ptIndex = src['navigation.course.activeRoute.pointIndex']
+  let lastIndex = src['navigation.course.activeRoute.waypoints'].length - 1
+
+  // determine segments to sum
+  let fromIndex: number
+  let toIndex: number
+  if (reverse) {
+    fromIndex = 0
+    toIndex = lastIndex - ptIndex
+    if (toIndex === fromIndex) {
+      return 0
+    }
+  } else {
+    if (ptIndex === lastIndex) {
+      return 0
+    }
+    fromIndex = ptIndex
+    toIndex = lastIndex
+  }
+
+  // sum segment lengths
+  let wpts = src['navigation.course.activeRoute.waypoints']
+  let rteLen = 0
+  for (let idx = fromIndex; idx < lastIndex; idx++) {
+    let pt = new LatLon(
+      wpts[idx].position.latitude,
+      wpts[idx].position.longitude
+    )
+    if (rhumbLine) {
+      rteLen += pt.rhumbDistanceTo(
+        new LatLon(
+          wpts[idx + 1].position.latitude,
+          wpts[idx + 1].position.longitude
+        )
+      )
+    } else {
+      rteLen += pt.distanceTo(
+        new LatLon(
+          wpts[idx + 1].position.latitude,
+          wpts[idx + 1].position.longitude
+        )
+      )
+    }
+  }
+  return rteLen
 }
 
 // return true if vessel is past perpendicular of destination
