@@ -111,9 +111,11 @@ module.exports = (server: CourseComputerApp): Plugin => {
   const srcPaths: SKPaths = {}
   let courseCalcs: CourseData
 
+  let metaSent = false
+
   // ******** REQUIRED PLUGIN DEFINITION *******
   const plugin: Plugin = {
-    id: 'course-data',
+    id: 'course-provider',
     name: 'Course Data provider',
     schema: () => CONFIG_SCHEMA,
     uiSchema: () => CONFIG_UISCHEMA,
@@ -274,11 +276,14 @@ module.exports = (server: CourseComputerApp): Plugin => {
     watchPassedDest.value = result.passedPerpendicular ? 1 : 0
     courseCalcs = result
     server.handleMessage(plugin.id, buildDeltaMsg(courseCalcs as CourseData))
-    if (true) {
+    server.debug(`*** course data delta sent***`)
+    if (!metaSent) {
       server.handleMessage(
         plugin.id,
-        buildMetaDeltaMsg(courseCalcs as CourseData)
+        buildMetaDeltaMsg()
       )
+      server.debug(`*** meta delta sent***`)
+      metaSent = true
     }
   }
 
@@ -287,7 +292,8 @@ module.exports = (server: CourseComputerApp): Plugin => {
     const calcPath = 'navigation.course.calcValues'
     const source =
       config.calculations.method === 'Rhumbline' ? course.rl : course.gc
-
+    
+    server.debug(`*** building course data delta ***`)
     values.push({
       path: `${calcPath}.calcMethod`,
       value: source.calcMethod
@@ -390,12 +396,10 @@ module.exports = (server: CourseComputerApp): Plugin => {
     }
   }
 
-  const buildMetaDeltaMsg = (course: CourseData): any => {
+  const buildMetaDeltaMsg = (): any => {
     const metas: Array<{ path: string; value: any }> = []
     const calcPath = 'navigation.course.calcValues'
-    const source =
-      config.calculations.method === 'Rhumbline' ? course.rl : course.gc
-
+    server.debug(`*** building meta delta ***`)
     metas.push({
       path: `${calcPath}.calcMethod`,
       value: {

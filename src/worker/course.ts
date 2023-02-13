@@ -19,8 +19,8 @@ parentPort?.on('message', (message: SKPaths) => {
 
 function parseSKPaths(src: SKPaths): boolean {
   return src['navigation.position'] &&
-    src['navigation.course.nextPoint'].position &&
-    src['navigation.course.previousPoint'].position
+    src['navigation.course.nextPoint']?.position &&
+    src['navigation.course.previousPoint']?.position
     ? true
     : false
 }
