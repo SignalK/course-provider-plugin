@@ -24,7 +24,6 @@ interface CourseComputerApp extends Application, PluginServerApp {
     id: string | null,
     msg: DeltaUpdate | DeltaNotification
   ) => void
-  config: { configPath: string }
   streambundle: {
     getSelfBus: (path: string | void) => any
   }
@@ -85,18 +84,16 @@ const CONFIG_UISCHEMA = {
 }
 
 const SRC_PATHS = [
-  'navigation.course.nextPoint.arrivalCircle',
-  'navigation.course.nextPoint.position',
-  'navigation.course.previousPoint.position',
   'navigation.position',
   'navigation.magneticVariation',
   'navigation.headingTrue',
   'navigation.speedOverGround',
   'navigation.datetime',
+  'navigation.course.arrivalCircle',
+  'navigation.course.startTime',
   'navigation.course.targetArrivalTime',
-  'navigation.course.activeRoute.waypoints',
-  'navigation.course.activeRoute.pointIndex',
-  'navigation.course.activeRoute.reverse'
+  'navigation.course.nextPoint',
+  'navigation.course.previousPoint'
 ]
 
 module.exports = (server: CourseComputerApp): Plugin => {
@@ -270,12 +267,19 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   // send calculation results delta
   const calcResult = async (result: CourseData) => {
+    server.debug(`*** calculation result ***`)
     watchArrival.rangeMax =
       srcPaths['navigation.course.nextPoint.arrivalCircle'] ?? -1
     watchArrival.value = result.gc?.distance ?? -1
     watchPassedDest.value = result.passedPerpendicular ? 1 : 0
     courseCalcs = result
     server.handleMessage(plugin.id, buildDeltaMsg(courseCalcs as CourseData))
+    if (true) {
+      server.handleMessage(
+        plugin.id,
+        buildMetaDeltaMsg(courseCalcs as CourseData)
+      )
+    }
   }
 
   const buildDeltaMsg = (course: CourseData): any => {
@@ -381,6 +385,138 @@ module.exports = (server: CourseComputerApp): Plugin => {
       updates: [
         {
           values: values
+        }
+      ]
+    }
+  }
+
+  const buildMetaDeltaMsg = (course: CourseData): any => {
+    const metas: Array<{ path: string; value: any }> = []
+    const calcPath = 'navigation.course.calcValues'
+    const source =
+      config.calculations.method === 'Rhumbline' ? course.rl : course.gc
+
+    metas.push({
+      path: `${calcPath}.calcMethod`,
+      value: {
+        description: 'Calculation type used (GreatCircle or Rhumbline).'
+      }
+    })
+    metas.push({
+      path: `${calcPath}.bearingTrackTrue`,
+      value: {
+        description:
+          'The bearing of a line between previousPoint and nextPoint, relative to true north.',
+        units: 'rad'
+      }
+    })
+    metas.push({
+      path: `${calcPath}.bearingTrackMagnetic`,
+      value: {
+        description:
+          'The bearing of a line between previousPoint and nextPoint, relative to magnetic north.',
+        units: 'rad'
+      }
+    })
+    metas.push({
+      path: `${calcPath}.crossTrackError`,
+      value: {
+        description:
+          "The distance from the vessel's present position to the closest point on a line (track) between previousPoint and nextPoint. A negative number indicates that the vessel is currently to the left of this line (and thus must steer right to compensate), a positive number means the vessel is to the right of the line (steer left to compensate).",
+        units: 'm'
+      }
+    })
+
+    metas.push({
+      path: `${calcPath}.previousPoint.distance`,
+      value: {
+        description:
+          "The distance in meters between the vessel's present position and the previousPoint.",
+        units: 'm'
+      }
+    })
+
+    metas.push({
+      path: `${calcPath}.distance`,
+      value: {
+        description:
+          "The distance in meters between the vessel's present position and the nextPoint.",
+        units: 'm'
+      }
+    })
+    metas.push({
+      path: `${calcPath}.bearingTrue`,
+      value: {
+        description:
+          "The bearing of a line between the vessel's current position and nextPoint, relative to true north.",
+        units: 'rad'
+      }
+    })
+    if (config.calculations.autopilot) {
+      metas.push({
+        path: `steering.autopilot.target.headingTrue`,
+        value: {
+          description:
+            "The bearing of a line between the vessel's current position and nextPoint, relative to true north.",
+          units: 'rad'
+        }
+      })
+    }
+    metas.push({
+      path: `${calcPath}.bearingMagnetic`,
+      value: {
+        description:
+          "The bearing of a line between the vessel's current position and nextPoint, relative to magnetic north.",
+        units: 'rad'
+      }
+    })
+    if (config.calculations.autopilot) {
+      metas.push({
+        path: `steering.autopilot.target.bearingMagnetic`,
+        value: {
+          description:
+            "The bearing of a line between the vessel's current position and nextPoint, relative to magnetic north.",
+          units: 'rad'
+        }
+      })
+    }
+
+    metas.push({
+      path: `${calcPath}.velocityMadeGood`,
+      value: {
+        description:
+          'The velocity component of the vessel towards the nextPoint.',
+        units: 'm/s'
+      }
+    })
+    metas.push({
+      path: `${calcPath}.timeToGo`,
+      value: {
+        description:
+          "Time in seconds to reach nextPoint's perpendicular) with current speed & direction.",
+        units: 's'
+      }
+    })
+    metas.push({
+      path: `${calcPath}.estimatedTimeOfArrival`,
+      value: {
+        description: 'The estimated time of arrival at nextPoint position.',
+        units: 's'
+      }
+    })
+    metas.push({
+      path: `${calcPath}.targetSpeed`,
+      value: {
+        description:
+          'The average speed required to arrive at the destination at the targetArrivalTime.',
+        units: 'm/s'
+      }
+    })
+
+    return {
+      updates: [
+        {
+          meta: metas
         }
       ]
     }
