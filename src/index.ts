@@ -261,7 +261,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
   const calcResult = async (result: CourseData) => {
     server.debug(`*** calculation result ***`)
     watchArrival.rangeMax =
-      srcPaths['navigation.course.nextPoint.arrivalCircle'] ?? -1
+      srcPaths['navigation.course.arrivalCircle'] ?? -1
     watchArrival.value = result.gc?.distance ?? -1
     watchPassedDest.value = result.passedPerpendicular ? 1 : 0
     courseCalcs = result

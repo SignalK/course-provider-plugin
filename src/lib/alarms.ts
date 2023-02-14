@@ -2,19 +2,6 @@ import { Subject, Observable } from 'rxjs'
 
 import { ALARM_METHOD, ALARM_STATE, DeltaNotification } from '../types'
 
-export const STANDARD_ALARMS = [
-  'mob',
-  'fire',
-  'sinking',
-  'flooding',
-  'collision',
-  'grounding',
-  'listing',
-  'adrift',
-  'piracy',
-  'abandon'
-]
-
 export class Notification {
   private _message: DeltaNotification
 
