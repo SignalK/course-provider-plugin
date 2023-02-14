@@ -51,10 +51,6 @@ const CONFIG_SCHEMA = {
           type: 'string',
           default: 'GreatCircle',
           enum: ['GreatCircle', 'Rhumbline']
-        },
-        autopilot: {
-          type: 'boolean',
-          title: 'Emit target heading delta'
         }
       }
     }
@@ -74,11 +70,6 @@ const CONFIG_UISCHEMA = {
       'ui:widget': 'radio',
       'ui:title': 'Course calculation method',
       'ui:help': ' '
-    },
-    autopilot: {
-      'ui:widget': 'checkbox',
-      'ui:title': ' Autopilot',
-      'ui:help': ''
     }
   }
 }
@@ -133,8 +124,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
       sound: false
     },
     calculations: {
-      method: 'GreatCircle',
-      autopilot: false
+      method: 'GreatCircle'
     }
   }
 
@@ -337,15 +327,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
       value:
         typeof source?.bearingTrue === 'undefined' ? null : source?.bearingTrue
     })
-    if (config.calculations.autopilot) {
-      values.push({
-        path: `steering.autopilot.target.headingTrue`,
-        value:
-          typeof source?.bearingTrue === 'undefined'
-            ? null
-            : source?.bearingTrue
-      })
-    }
     values.push({
       path: `${calcPath}.bearingMagnetic`,
       value:
@@ -353,15 +334,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
           ? null
           : source?.bearingMagnetic
     })
-    if (config.calculations.autopilot) {
-      values.push({
-        path: `steering.autopilot.target.bearingMagnetic`,
-        value:
-          typeof source?.bearingMagnetic === 'undefined'
-            ? null
-            : source?.bearingMagnetic
-      })
-    }
 
     values.push({
       path: `${calcPath}.velocityMadeGood`,
@@ -456,16 +428,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
         units: 'rad'
       }
     })
-    if (config.calculations.autopilot) {
-      metas.push({
-        path: `steering.autopilot.target.headingTrue`,
-        value: {
-          description:
-            "The bearing of a line between the vessel's current position and nextPoint, relative to true north.",
-          units: 'rad'
-        }
-      })
-    }
     metas.push({
       path: `${calcPath}.bearingMagnetic`,
       value: {
@@ -474,17 +436,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
         units: 'rad'
       }
     })
-    if (config.calculations.autopilot) {
-      metas.push({
-        path: `steering.autopilot.target.bearingMagnetic`,
-        value: {
-          description:
-            "The bearing of a line between the vessel's current position and nextPoint, relative to magnetic north.",
-          units: 'rad'
-        }
-      })
-    }
-
     metas.push({
       path: `${calcPath}.velocityMadeGood`,
       value: {

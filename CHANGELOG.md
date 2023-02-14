@@ -20,7 +20,3 @@
     - `notifications.navigation.arrivalCircleEntered`
     - `notifications.navigation.perpendicularPassed`
 
-- Optionally (as per configuration) populate the following steering / autopilot path(s):
-    - `steering.autopilot.target.headingTrue`
-
-
