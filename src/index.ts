@@ -7,12 +7,18 @@ import {
   ALARM_METHOD,
   ALARM_STATE,
   DeltaNotification,
-  DeltaUpdate
+  DeltaUpdate,
+  DeltaValue
 } from './types'
 
 import path from 'path'
 import { Worker } from 'worker_threads'
 import { Subscription } from 'rxjs'
+
+interface SKDeltaSubscription {
+  context: string
+  subscribe: Array<{ path: string; period: number }>
+}
 
 interface CourseComputerApp extends Application, PluginServerApp {
   error: (msg: string) => void
@@ -24,8 +30,13 @@ interface CourseComputerApp extends Application, PluginServerApp {
     id: string | null,
     msg: DeltaUpdate | DeltaNotification
   ) => void
-  streambundle: {
-    getSelfBus: (path: string | void) => any
+  subscriptionmanager: {
+    subscribe: (
+      subscribe: SKDeltaSubscription,
+      unsubscribes: Array<any>,
+      errorCallback: (error: any) => void,
+      deltaCallback: (delta: DeltaUpdate) => void
+    ) => void
   }
 }
 
@@ -92,7 +103,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
   const watchPassedDest: Watcher = new Watcher() // watch passedPerpendicular
   watchPassedDest.rangeMin = 1
   watchPassedDest.rangeMax = 2
-  let baconSub: any[] = [] // stream subscriptions
+  let unsubscribes: any[] = [] // delta stream subscriptions
   let obs: any[] = [] // Observables subscription
   let worker: Worker
 
@@ -161,8 +172,8 @@ module.exports = (server: CourseComputerApp): Plugin => {
   const doShutdown = () => {
     server.debug('** shutting down **')
     server.debug('** Un-subscribing from events **')
-    baconSub.forEach((b) => b())
-    baconSub = []
+    unsubscribes.forEach((s) => s())
+    unsubscribes = []
     obs.forEach((o: Subscription) => o.unsubscribe())
     obs = []
     if (worker) {
@@ -175,20 +186,42 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   // *****************************************
 
-  // register STREAM UPDATE message handler
+  // register DELTA stream message handler
   const initSubscriptions = (skPaths: string[]) => {
     getPaths(skPaths)
 
-    skPaths.forEach((path: string) => {
-      baconSub.push(
-        server.streambundle.getSelfBus(path).onValue((v: any) => {
-          srcPaths[path] = v.value
-          if (path === 'navigation.position') {
-            calc()
+    const subscription: SKDeltaSubscription = {
+      context: 'vessels.self',
+      subscribe: skPaths.map((p) => ({
+        path: p,
+        period: 500
+      }))
+    }
+
+    server.subscriptionmanager.subscribe(
+      subscription,
+      unsubscribes,
+      (error) => {
+        server.error(`${plugin.id} Error: ${error}`)
+      },
+      (delta: DeltaUpdate) => {
+        if (!delta.updates) {
+          return
+        }
+        delta.updates.forEach((u: { values: DeltaValue[] }) => {
+          if (!u.values) {
+            return
           }
+          u.values.forEach((v: DeltaValue) => {
+            srcPaths[v.path] = v.value
+            if (v.path === 'navigation.position') {
+              server.debug(`navigation.position ${v.value} => calc()`)
+              calc()
+            }
+          })
         })
-      )
-    })
+      }
+    )
 
     obs.push(
       watchArrival.change$.subscribe((event: WatchEvent) => {
@@ -260,18 +293,14 @@ module.exports = (server: CourseComputerApp): Plugin => {
   // send calculation results delta
   const calcResult = async (result: CourseData) => {
     server.debug(`*** calculation result ***`)
-    watchArrival.rangeMax =
-      srcPaths['navigation.course.arrivalCircle'] ?? -1
+    watchArrival.rangeMax = srcPaths['navigation.course.arrivalCircle'] ?? -1
     watchArrival.value = result.gc?.distance ?? -1
     watchPassedDest.value = result.passedPerpendicular ? 1 : 0
     courseCalcs = result
     server.handleMessage(plugin.id, buildDeltaMsg(courseCalcs as CourseData))
     server.debug(`*** course data delta sent***`)
     if (!metaSent) {
-      server.handleMessage(
-        plugin.id,
-        buildMetaDeltaMsg()
-      )
+      server.handleMessage(plugin.id, buildMetaDeltaMsg())
       server.debug(`*** meta delta sent***`)
       metaSent = true
     }
@@ -282,7 +311,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
     const calcPath = 'navigation.course.calcValues'
     const source =
       config.calculations.method === 'Rhumbline' ? course.rl : course.gc
-    
+
     server.debug(`*** building course data delta ***`)
     values.push({
       path: `${calcPath}.calcMethod`,
