@@ -10,7 +10,7 @@
         "signalk-min-api-version:2"
     ],
     "repository": {
-        "url": "https://github.com/@SignalK/coursedata-provider-plugin",
+        "url": "https://github.com/SignalK/coursedata-provider-plugin",
         "type": "git"
     },
     "author": "AdrianP",
