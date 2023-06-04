@@ -174,7 +174,7 @@ function timeCalcs(
   }
 }
 
-// Avg speed required to arrive at destinationa at targetArrivalTime
+// Avg speed required to arrive at destination at targetArrivalTime
 function targetSpeed(
   src: SKPaths,
   distance: number,
