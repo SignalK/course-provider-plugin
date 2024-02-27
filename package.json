@@ -5,7 +5,7 @@
     "main": "plugin/index.js",
     "keywords": [
         "signalk-node-server-plugin",
-        "signalk-category-chart-plotters",
+        "signalk-category-utility",
         "signalk",
         "signalk-min-api-version:2"
     ],
