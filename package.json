@@ -1,6 +1,6 @@
 {
     "name": "@signalk/course-provider",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Course data provider plugin for SignalK Server.",
     "main": "plugin/index.js",
     "keywords": [
@@ -26,7 +26,7 @@
         "watch": "npm run build -- -w",
         "test": "echo \"Error: no test specified\" && exit 1",
         "start": "npm run build -- -w",
-        "prepare": "tsc",
+        "prepublishOnly": "tsc",
         "format": "prettier --write src/*"
     },
     "dependencies": {

@@ -2,7 +2,7 @@
 
 __Signal K server plugin that acts as a Course data provider__.
 
-_Note: This plugin should ONLY be installed on a Signal K server that implements `v2 Course API`!_
+_Note: This plugin should ONLY be installed on Signal K Server version 2.0 or later!_
 
 ---
 

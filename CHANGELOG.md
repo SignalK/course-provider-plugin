@@ -1,5 +1,9 @@
 # CHANGELOG: @signalk/course-provider
 
+## v1.0.1
+
+- **Update**: - Change plugin catagory keyword to `signalk-category-utility`.
+
 ## v1.0.0
 
 - Populates the following course data paths under `navigation.course.calcValues`:
