@@ -165,7 +165,7 @@ function timeCalcs(
     : new Date()
 
   const dateMsec = date.getTime()
-  const ttgMsec = Math.floor((distance / (vmg * 0.514444)) * 1000)
+  const ttgMsec = Math.floor((distance / vmg) * 1000)
   const etaMsec = dateMsec + ttgMsec
 
   return {
