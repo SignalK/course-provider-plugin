@@ -298,7 +298,11 @@ module.exports = (server: CourseComputerApp): Plugin => {
     watchArrival.value = result.gc?.distance ?? -1
     watchPassedDest.value = result.passedPerpendicular ? 1 : 0
     courseCalcs = result
-    server.handleMessage(plugin.id, buildDeltaMsg(courseCalcs as CourseData), 'v2')
+    server.handleMessage(
+      plugin.id,
+      buildDeltaMsg(courseCalcs as CourseData),
+      'v2'
+    )
     server.debug(`*** course data delta sent***`)
     if (!metaSent) {
       server.handleMessage(plugin.id, buildMetaDeltaMsg(), 'v2')

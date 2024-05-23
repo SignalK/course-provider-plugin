@@ -1,6 +1,6 @@
 {
     "name": "@signalk/course-provider",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "description": "Course data provider plugin for SignalK Server.",
     "main": "plugin/index.js",
     "keywords": [

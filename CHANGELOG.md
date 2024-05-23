@@ -1,5 +1,9 @@
 # CHANGELOG: @signalk/course-provider
 
+## v1.0.2
+
+- **Fixed**: - Remove erroneous unit conversion in TTG calculation.
+
 ## v1.0.1
 
 - **Update**: - Change plugin catagory keyword to `signalk-category-utility`.
