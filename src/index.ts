@@ -216,7 +216,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
           u.values.forEach((v: DeltaValue) => {
             srcPaths[v.path] = v.value
             if (v.path === 'navigation.position') {
-              server.debug(`navigation.position ${v.value} => calc()`)
+              server.debug(`navigation.position ${JSON.stringify(v.value)} => calc()`)
               calc()
             }
           })
@@ -286,7 +286,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
   // trigger course calculations
   const calc = () => {
     if (srcPaths['navigation.position']) {
-      server.debug(`*** do course calculation ***`)
       worker?.postMessage(srcPaths)
     }
   }
@@ -320,7 +319,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
     server.debug(`*** building course data delta ***`)
     values.push({
       path: `${calcPath}.calcMethod`,
-      value: source.calcMethod
+      value: config.calculations.method
     })
     values.push({
       path: `${calcPath}.bearingTrackTrue`,

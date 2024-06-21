@@ -1,5 +1,9 @@
 # CHANGELOG: @signalk/course-provider
 
+## v1.0.3
+
+- **Fixed**: - Value of `navigation.course.calcValues.calcMethod` being set to `undefined` when course is cleared.
+
 ## v1.0.2
 
 - **Fixed**: - Remove erroneous unit conversion in TTG calculation.
