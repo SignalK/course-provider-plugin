@@ -56,22 +56,15 @@ function calcs(src: SKPaths): CourseData {
   }
 
   const xte = vesselPosition?.crossTrackDistanceTo(startPoint, destination)
+  const magVar = src['navigation.magneticVariation'] ?? 0.0
 
   // GreatCircle
   const bearingTrackTrue = toRadians(startPoint?.initialBearingTo(destination))
   const bearingTrue = toRadians(vesselPosition?.initialBearingTo(destination))
-  let bearingTrackMagnetic: number | null = null
-  let bearingMagnetic: number | null = null
-
-  if (typeof src['navigation.magneticVariation'] === 'number') {
-    bearingTrackMagnetic =
-      (bearingTrackTrue as number) - src['navigation.magneticVariation']
-    bearingMagnetic =
-      (bearingTrue as number) - src['navigation.magneticVariation']
-  }
-
+  const bearingTrackMagnetic = bearingTrackTrue + magVar
+  const bearingMagnetic = bearingTrue + magVar
   const gcDistance = vesselPosition?.distanceTo(destination)
-  const gcVmg = vmg(src, bearingTrue)
+  const gcVmg = vmg(src, bearingTrue, 'true') // prefer 'true' values
   const gcTime = timeCalcs(src, gcDistance, gcVmg as number)
 
   res.gc = {
@@ -94,18 +87,10 @@ function calcs(src: SKPaths): CourseData {
   // Rhumbline
   const rlBearingTrackTrue = toRadians(startPoint?.rhumbBearingTo(destination))
   const rlBearingTrue = toRadians(vesselPosition?.rhumbBearingTo(destination))
-  let rlBearingTrackMagnetic: number | null = null
-  let rlBearingMagnetic: number | null = null
-
-  if (typeof src['navigation.magneticVariation'] === 'number') {
-    rlBearingTrackMagnetic =
-      (rlBearingTrackTrue as number) - src['navigation.magneticVariation']
-    rlBearingMagnetic =
-      (rlBearingTrue as number) - src['navigation.magneticVariation']
-  }
-
+  const rlBearingTrackMagnetic = rlBearingTrackTrue + magVar
+  const rlBearingMagnetic = rlBearingTrue + magVar
   const rlDistance = vesselPosition?.rhumbDistanceTo(destination)
-  const rlVmg = vmg(src, rlBearingTrue)
+  const rlVmg = vmg(src, rlBearingTrue, 'true') // prefer 'true' values
   const rlTime = timeCalcs(src, rlDistance, rlVmg as number)
 
   res.rl = {
@@ -136,18 +121,23 @@ function calcs(src: SKPaths): CourseData {
 }
 
 // Velocity Made Good to Course
-function vmg(src: SKPaths, bearingTrue: number): number | null {
+function vmg(
+  src: SKPaths,
+  bearing: number,
+  bearingType: 'true' | 'magnetic' = 'true'
+): number | null {
+  const hdg =
+    bearingType === 'true'
+      ? src['navigation.headingTrue']
+      : src['navigation.headingMagnetic']
   if (
-    typeof src['navigation.headingTrue'] !== 'number' ||
+    typeof hdg !== 'number' ||
     typeof src['navigation.speedOverGround'] !== 'number'
   ) {
     return null
   }
 
-  return (
-    Math.cos(bearingTrue - src['navigation.headingTrue']) *
-    src['navigation.speedOverGround']
-  )
+  return Math.cos(bearing - hdg) * src['navigation.speedOverGround']
 }
 
 // Time to Go & Estimated time of arrival at the nextPoint
