@@ -21,6 +21,10 @@ This plugin populates the following course data paths found under `navigation.co
 - `estimatedTimeOfArrival`
 - `targetSpeed`
 
+AND
+- `performance.velocityMadeGoodToWaypoint`
+
+
 Additionally it will raise the following notification:
 - **`notifications.navigation.arrivalCircleEntered`**: _alert_ message is sent when the value of `distance` falls below the value of `navigation.course.nextPoint.arrivalCircle`.
 

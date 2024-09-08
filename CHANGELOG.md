@@ -1,5 +1,10 @@
 # CHANGELOG: @signalk/course-provider
 
+## v1.1.0
+
+- **Added**: - `performance.velocityMadeGoodToWaypoint`.
+- **Update**: - Use a value of _0_ when `navigation.magneticVariation` is undefined to ensure `bearingTrackMagnetic` & `bearingMagnetic` have a value.
+
 ## v1.0.3
 
 - **Fixed**: - Value of `navigation.course.calcValues.calcMethod` being set to `undefined` when course is cleared.
