@@ -216,7 +216,9 @@ module.exports = (server: CourseComputerApp): Plugin => {
           u.values.forEach((v: DeltaValue) => {
             srcPaths[v.path] = v.value
             if (v.path === 'navigation.position') {
-              server.debug(`navigation.position ${JSON.stringify(v.value)} => calc()`)
+              server.debug(
+                `navigation.position ${JSON.stringify(v.value)} => calc()`
+              )
               calc()
             }
           })
@@ -370,6 +372,13 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
     values.push({
       path: `${calcPath}.velocityMadeGood`,
+      value:
+        typeof source?.velocityMadeGood === 'undefined'
+          ? null
+          : source?.velocityMadeGood
+    })
+    values.push({
+      path: `performance.velocityMadeGoodToWaypoint`,
       value:
         typeof source?.velocityMadeGood === 'undefined'
           ? null
@@ -569,6 +578,5 @@ module.exports = (server: CourseComputerApp): Plugin => {
     })
   }
 
-  // ******************************************
   return plugin
 }
