@@ -29,6 +29,19 @@ function toRadians(value: number) {
   return (value * Math.PI) / 180
 }
 
+/** Normalises angle to a value within the range of a compass
+ * @param angle: angle (in radians)
+ * @returns value between 0 - 2*PI
+ */
+function compassAngle(angle: number): number {
+  const maxAngle = Math.PI * 2
+  return angle < 0
+    ? angle + maxAngle
+    : angle >= maxAngle
+    ? angle - maxAngle
+    : angle
+}
+
 // course calculations
 function calcs(src: SKPaths): CourseData {
   const vesselPosition = src['navigation.position']
@@ -61,8 +74,8 @@ function calcs(src: SKPaths): CourseData {
   // GreatCircle
   const bearingTrackTrue = toRadians(startPoint?.initialBearingTo(destination))
   const bearingTrue = toRadians(vesselPosition?.initialBearingTo(destination))
-  const bearingTrackMagnetic = bearingTrackTrue + magVar
-  const bearingMagnetic = bearingTrue + magVar
+  const bearingTrackMagnetic = compassAngle(bearingTrackTrue + magVar)
+  const bearingMagnetic = compassAngle(bearingTrue + magVar)
   const gcDistance = vesselPosition?.distanceTo(destination)
   const gcVmg = vmg(src, bearingTrue, 'true') // prefer 'true' values
   const gcTime = timeCalcs(src, gcDistance, gcVmg as number)
@@ -87,8 +100,8 @@ function calcs(src: SKPaths): CourseData {
   // Rhumbline
   const rlBearingTrackTrue = toRadians(startPoint?.rhumbBearingTo(destination))
   const rlBearingTrue = toRadians(vesselPosition?.rhumbBearingTo(destination))
-  const rlBearingTrackMagnetic = rlBearingTrackTrue + magVar
-  const rlBearingMagnetic = rlBearingTrue + magVar
+  const rlBearingTrackMagnetic = compassAngle(rlBearingTrackTrue + magVar)
+  const rlBearingMagnetic = compassAngle(rlBearingTrue + magVar)
   const rlDistance = vesselPosition?.rhumbDistanceTo(destination)
   const rlVmg = vmg(src, rlBearingTrue, 'true') // prefer 'true' values
   const rlTime = timeCalcs(src, rlDistance, rlVmg as number)
