@@ -30,12 +30,11 @@ function toRadians(value: number) {
 }
 
 /** Normalises angle to a value within the range of a compass
- * @param angle: angle (in radians or degrees)
- * @param units: unit of the angle supplied => 'rad' (radians) or 'deg' (degrees)
+ * @param angle: angle (in radians)
  * @returns value between 0 - 2*PI
  */
-function compassAngle(angle: number, units: 'rad' | 'deg' = 'rad'): number {
-  const maxAngle = units === 'rad' ? Math.PI * 2 : 360
+function compassAngle(angle: number): number {
+  const maxAngle = Math.PI * 2
   return angle < 0
     ? angle + maxAngle
     : angle >= maxAngle
