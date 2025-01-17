@@ -1,5 +1,9 @@
 # CHANGELOG: @signalk/course-provider
 
+## v1.1.1
+
+- **Fixed**: - Issue where magnetic bearing values fell outside of the 0-360 degree range.
+
 ## v1.1.0
 
 - **Added**: - `performance.velocityMadeGoodToWaypoint`.
