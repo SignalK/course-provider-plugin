@@ -78,7 +78,7 @@ function calcs(src: SKPaths): CourseData {
   const bearingMagnetic = compassAngle(bearingTrue + magVar)
   const gcDistance = vesselPosition?.distanceTo(destination)
   const gcVmg = vmg(src, bearingTrue, 'true') // prefer 'true' values
-  const gcTime = timeCalcs(src, gcDistance, gcVmg as number)
+  const gcTime = timeCalcs(src, gcDistance, gcVmg as number, false)
 
   res.gc = {
     calcMethod: 'GreatCircle',
@@ -89,10 +89,15 @@ function calcs(src: SKPaths): CourseData {
     bearingTrue: bearingTrue,
     bearingMagnetic: bearingMagnetic,
     velocityMadeGood: gcVmg,
-    timeToGo: gcTime.ttg,
-    estimatedTimeOfArrival: gcTime.eta,
+    timeToGo: gcTime.nextPoint.ttg,
+    estimatedTimeOfArrival: gcTime.nextPoint.eta,
     previousPoint: {
       distance: vesselPosition?.distanceTo(startPoint)
+    },
+    route: {
+      timeToGo: gcTime.route.ttg,
+      estimatedTimeOfArrival: gcTime.route.eta,
+      distance: gcTime.route.dtg
     },
     targetSpeed: targetSpeed(src, gcDistance)
   }
@@ -104,7 +109,7 @@ function calcs(src: SKPaths): CourseData {
   const rlBearingMagnetic = compassAngle(rlBearingTrue + magVar)
   const rlDistance = vesselPosition?.rhumbDistanceTo(destination)
   const rlVmg = vmg(src, rlBearingTrue, 'true') // prefer 'true' values
-  const rlTime = timeCalcs(src, rlDistance, rlVmg as number)
+  const rlTime = timeCalcs(src, rlDistance, rlVmg as number, true)
 
   res.rl = {
     calcMethod: 'Rhumbline',
@@ -115,10 +120,15 @@ function calcs(src: SKPaths): CourseData {
     bearingTrue: rlBearingTrue,
     bearingMagnetic: rlBearingMagnetic,
     velocityMadeGood: rlVmg,
-    timeToGo: rlTime.ttg,
-    estimatedTimeOfArrival: rlTime.eta,
+    timeToGo: rlTime.nextPoint.ttg,
+    estimatedTimeOfArrival: rlTime.nextPoint.eta,
     previousPoint: {
       distance: vesselPosition?.rhumbDistanceTo(startPoint)
+    },
+    route: {
+      timeToGo: rlTime.route.ttg,
+      estimatedTimeOfArrival: rlTime.route.eta,
+      distance: rlTime.route.dtg
     },
     targetSpeed: targetSpeed(src, rlDistance, true)
   }
@@ -153,14 +163,35 @@ function vmg(
   return Math.cos(bearing - hdg) * src['navigation.speedOverGround']
 }
 
-// Time to Go & Estimated time of arrival at the nextPoint
+interface CourseTimes {
+  nextPoint: {
+    ttg: number | null
+    eta: string | null
+  }
+  route: {
+    ttg: number | null
+    eta: string | null
+    dtg: number | null
+  }
+}
+// Time to Go & Estimated time of arrival at the nextPoint / route destination
 function timeCalcs(
   src: SKPaths,
   distance: number,
-  vmg: number
-): { ttg: number | null; eta: string | null } {
+  vmg: number,
+  rhumbLine: boolean
+): CourseTimes {
+  const isRoute =
+    Array.isArray(src['activeRoute']?.waypoints) &&
+    src['activeRoute']?.waypoints.length !== 0
+
+  const result: CourseTimes = {
+    nextPoint: { ttg: null, eta: null },
+    route: { ttg: null, eta: null, dtg: null }
+  }
+
   if (typeof distance !== 'number' || !vmg) {
-    return { ttg: null, eta: null }
+    return result
   }
 
   const date: Date = src['navigation.datetime']
@@ -168,13 +199,21 @@ function timeCalcs(
     : new Date()
 
   const dateMsec = date.getTime()
-  const ttgMsec = Math.floor((distance / vmg) * 1000)
-  const etaMsec = dateMsec + ttgMsec
 
-  return {
-    ttg: ttgMsec / 1000,
-    eta: new Date(etaMsec).toISOString()
+  const nextTtgMsec = Math.floor((distance / vmg) * 1000)
+  const nextEtaMsec = dateMsec + nextTtgMsec
+  result.nextPoint.ttg = nextTtgMsec / 1000
+  result.nextPoint.eta = new Date(nextEtaMsec).toISOString()
+
+  if (isRoute) {
+    const rteDistance = distance + routeRemaining(src, rhumbLine)
+    const routeTtgMsec = Math.floor((rteDistance / vmg) * 1000)
+    const routeEtaMsec = dateMsec + routeTtgMsec
+    result.route.ttg = routeTtgMsec / 1000
+    result.route.eta = new Date(routeEtaMsec).toISOString()
+    result.route.dtg = rteDistance
   }
+  return result
 }
 
 // Avg speed required to arrive at destination at targetArrivalTime
@@ -191,7 +230,7 @@ function targetSpeed(
   }
 
   // if route totalDistance = distance plus + length of remaining route segments
-  if (src['navigation.course.activeRoute.waypoints']) {
+  if (src['activeRoute']?.waypoints) {
     distance += routeRemaining(src, rhumbLine)
   }
 
@@ -212,18 +251,18 @@ function targetSpeed(
 // total distance in meters of remaining route segments
 function routeRemaining(src: SKPaths, rhumbLine?: boolean): number {
   if (
-    src['navigation.course.activeRoute.pointIndex'] === null ||
-    !src['navigation.course.activeRoute.waypoints'] ||
-    !Array.isArray(src['navigation.course.activeRoute.waypoints'])
+    src['activeRoute']?.pointIndex === null ||
+    !Array.isArray(src['activeRoute']?.waypoints)
   ) {
     return 0
   }
-  if (src['navigation.course.activeRoute.waypoints'].length < 2) {
+  if (src['activeRoute']?.waypoints.length < 2) {
     return 0
   }
-  let reverse = src['navigation.course.activeRoute.reverse']
-  let ptIndex = src['navigation.course.activeRoute.pointIndex']
-  let lastIndex = src['navigation.course.activeRoute.waypoints'].length - 1
+
+  let reverse = src['activeRoute']?.reverse
+  let ptIndex = src['activeRoute']?.pointIndex
+  let lastIndex = src['activeRoute']?.waypoints.length - 1
 
   // determine segments to sum
   let fromIndex: number
@@ -243,27 +282,16 @@ function routeRemaining(src: SKPaths, rhumbLine?: boolean): number {
   }
 
   // sum segment lengths
-  let wpts = src['navigation.course.activeRoute.waypoints']
+  let wpts = src['activeRoute'].waypoints
   let rteLen = 0
   for (let idx = fromIndex; idx < lastIndex; idx++) {
-    let pt = new LatLon(
-      wpts[idx].position.latitude,
-      wpts[idx].position.longitude
-    )
+    let pt = new LatLon(wpts[idx][1], wpts[idx][0])
     if (rhumbLine) {
       rteLen += pt.rhumbDistanceTo(
-        new LatLon(
-          wpts[idx + 1].position.latitude,
-          wpts[idx + 1].position.longitude
-        )
+        new LatLon(wpts[idx + 1][1], wpts[idx + 1][0])
       )
     } else {
-      rteLen += pt.distanceTo(
-        new LatLon(
-          wpts[idx + 1].position.latitude,
-          wpts[idx + 1].position.longitude
-        )
-      )
+      rteLen += pt.distanceTo(new LatLon(wpts[idx + 1][1], wpts[idx + 1][0]))
     }
   }
   return rteLen

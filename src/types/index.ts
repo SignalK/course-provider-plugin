@@ -19,6 +19,11 @@ export interface CourseResult {
   previousPoint?: {
     distance?: number | null
   }
+  route?: {
+    timeToGo?: number | null
+    estimatedTimeOfArrival?: string | null
+    distance?: number | null
+  }
   bearingTrackTrue?: number | null
   bearingTrackMagnetic?: number | null
   crossTrackError?: number | null

@@ -1,4 +1,4 @@
-import { Plugin, PluginServerApp } from '@signalk/server-api'
+import { Plugin, ServerAPI, SKVersion } from '@signalk/server-api'
 import { Application, Request, Response } from 'express'
 import { Notification, Watcher, WatchEvent } from './lib/alarms'
 import {
@@ -6,7 +6,6 @@ import {
   SKPaths,
   ALARM_METHOD,
   ALARM_STATE,
-  DeltaNotification,
   DeltaUpdate,
   DeltaValue
 } from './types'
@@ -20,17 +19,7 @@ interface SKDeltaSubscription {
   subscribe: Array<{ path: string; period: number }>
 }
 
-interface CourseComputerApp extends Application, PluginServerApp {
-  error: (msg: string) => void
-  debug: (msg: string) => void
-  setPluginStatus: (pluginId: string, status?: string) => void
-  setPluginError: (pluginId: string, status?: string) => void
-  getSelfPath: (path: string) => any
-  handleMessage: (
-    id: string | null,
-    msg: DeltaUpdate | DeltaNotification,
-    version?: string
-  ) => void
+interface CourseComputerApp extends Application, ServerAPI {
   subscriptionmanager: {
     subscribe: (
       subscribe: SKDeltaSubscription,
@@ -38,6 +27,9 @@ interface CourseComputerApp extends Application, PluginServerApp {
       errorCallback: (error: any) => void,
       deltaCallback: (delta: DeltaUpdate) => void
     ) => void
+  }
+  resourcesApi: {
+    getResource: (resType: string, id: string) => Promise<any>
   }
 }
 
@@ -96,7 +88,9 @@ const SRC_PATHS = [
   'navigation.course.startTime',
   'navigation.course.targetArrivalTime',
   'navigation.course.nextPoint',
-  'navigation.course.previousPoint'
+  'navigation.course.previousPoint',
+  'navigation.course.activeRoute',
+  'resources.routes.*'
 ]
 
 module.exports = (server: CourseComputerApp): Plugin => {
@@ -113,6 +107,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   const srcPaths: SKPaths = {}
   let courseCalcs: CourseData
+  let activeRouteId: string = ''
 
   let metaSent = false
 
@@ -214,12 +209,18 @@ module.exports = (server: CourseComputerApp): Plugin => {
             return
           }
           u.values.forEach((v: DeltaValue) => {
-            srcPaths[v.path] = v.value
             if (v.path === 'navigation.position') {
               server.debug(
                 `navigation.position ${JSON.stringify(v.value)} => calc()`
               )
+              srcPaths[v.path] = v.value
               calc()
+            } else if (v.path === 'navigation.course.activeRoute') {
+              handleActiveRoute(Object.assign({}, v.value))
+            } else if (v.path.startsWith('resources.route')) {
+              handleRouteUpdate(v)
+            } else {
+              srcPaths[v.path] = v.value
             }
           })
         })
@@ -285,16 +286,67 @@ module.exports = (server: CourseComputerApp): Plugin => {
     server.debug(`[srcPaths]: ${JSON.stringify(srcPaths)}`)
   }
 
+  // retrieve waypoints for supplied route id
+  const getWaypoints = async (id: string): Promise<Array<[number, number]>> => {
+    const rte = await server.resourcesApi.getResource('routes', id)
+    const waypoints = rte ? rte.feature.geometry.coordinates : []
+    server.debug(`*** activeRoute waypoints *** ${waypoints}`)
+    return waypoints
+  }
+
+  // resources.routes delta handler
+  const handleRouteUpdate = async (msg: DeltaValue) => {
+    server.debug(`*** handleRouteUpdate *** ${JSON.stringify(msg)}`)
+    if (msg.path.endsWith(activeRouteId)) {
+      server.debug(`*** matched activeRouteId *** ${activeRouteId}`)
+      const waypoints = await getWaypoints(activeRouteId)
+      srcPaths['activeRoute'].waypoints = waypoints
+    }
+  }
+
+  // 'navigation.course.activeRoute' delta handler
+  const handleActiveRoute = async (value: any) => {
+    server.debug(`*** handleActiveRoute *** ${JSON.stringify(value)}`)
+
+    if (!value) {
+      srcPaths['activeRoute'] = null
+      activeRouteId = ''
+      return
+    }
+    if (!activeRouteId) {
+      activeRouteId = value.href.split('/').slice(-1)[0]
+    }
+
+    if (value.href.includes(activeRouteId)) {
+      const waypoints = await getWaypoints(activeRouteId)
+      srcPaths['activeRoute'] = Object.assign({}, value, {
+        waypoints: waypoints
+      })
+    }
+    server.debug(
+      `*** activeRoute *** ${JSON.stringify(srcPaths['activeRoute'])}`
+    )
+  }
+
   // trigger course calculations
   const calc = () => {
+    server.debug(
+      `*** navigation.position *** ${JSON.stringify(
+        srcPaths['navigation.position']
+      )}`
+    )
     if (srcPaths['navigation.position']) {
+      server.debug(JSON.stringify(srcPaths))
       worker?.postMessage(srcPaths)
+    } else {
+      server.debug('No vessel position.....Skipping calc()')
     }
   }
 
   // send calculation results delta
   const calcResult = async (result: CourseData) => {
     server.debug(`*** calculation result ***`)
+    server.debug(JSON.stringify(result))
     watchArrival.rangeMax = srcPaths['navigation.course.arrivalCircle'] ?? -1
     watchArrival.value = result.gc?.distance ?? -1
     watchPassedDest.value = result.passedPerpendicular ? 1 : 0
@@ -302,11 +354,11 @@ module.exports = (server: CourseComputerApp): Plugin => {
     server.handleMessage(
       plugin.id,
       buildDeltaMsg(courseCalcs as CourseData),
-      'v2'
+      SKVersion.v2
     )
     server.debug(`*** course data delta sent***`)
     if (!metaSent) {
-      server.handleMessage(plugin.id, buildMetaDeltaMsg(), 'v2')
+      server.handleMessage(plugin.id, buildMetaDeltaMsg(), SKVersion.v2)
       server.debug(`*** meta delta sent***`)
       metaSent = true
     }
@@ -395,6 +447,29 @@ module.exports = (server: CourseComputerApp): Plugin => {
           ? null
           : source?.estimatedTimeOfArrival
     })
+
+    values.push({
+      path: `${calcPath}.route.timeToGo`,
+      value:
+        typeof source?.route?.timeToGo === 'undefined'
+          ? null
+          : source?.route?.timeToGo
+    })
+    values.push({
+      path: `${calcPath}.route.estimatedTimeOfArrival`,
+      value:
+        typeof source?.route?.estimatedTimeOfArrival === 'undefined'
+          ? null
+          : source?.route?.estimatedTimeOfArrival
+    })
+    values.push({
+      path: `${calcPath}.route.distance`,
+      value:
+        typeof source?.route?.distance === 'undefined'
+          ? null
+          : source?.route?.distance
+    })
+
     values.push({
       path: `${calcPath}.targetSpeed`,
       value:
@@ -490,15 +565,36 @@ module.exports = (server: CourseComputerApp): Plugin => {
       path: `${calcPath}.timeToGo`,
       value: {
         description:
-          "Time in seconds to reach nextPoint's perpendicular) with current speed & direction.",
+          "Time in seconds to reach nextPoint's perpendicular with current speed & direction.",
         units: 's'
       }
     })
     metas.push({
       path: `${calcPath}.estimatedTimeOfArrival`,
       value: {
-        description: 'The estimated time of arrival at nextPoint position.',
+        description: 'The estimated time of arrival at nextPoint position.'
+      }
+    })
+    metas.push({
+      path: `${calcPath}.route.timeToGo`,
+      value: {
+        description:
+          'Time in seconds to reach final destination with current speed & direction.',
         units: 's'
+      }
+    })
+    metas.push({
+      path: `${calcPath}.route.estimatedTimeOfArrival`,
+      value: {
+        description: 'The estimated time of arrival at final destination.'
+      }
+    })
+    metas.push({
+      path: `${calcPath}.route.distance`,
+      value: {
+        description:
+          'The remaining distance along the route to reach the final destination.',
+        units: 'm'
       }
     })
     metas.push({
@@ -556,7 +652,9 @@ module.exports = (server: CourseComputerApp): Plugin => {
         emitNotification(
           new Notification(
             'navigation.course.perpendicularPassed',
-            watchPassedDest.value.toString(),
+            watchPassedDest.value === 1
+              ? 'Next Point perpendicular has been passed.'
+              : '',
             ALARM_STATE.alert,
             []
           )
