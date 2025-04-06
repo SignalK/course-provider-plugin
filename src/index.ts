@@ -1,4 +1,4 @@
-import { Plugin, ServerAPI, SKVersion } from '@signalk/server-api'
+import { Plugin, ServerAPI, SKVersion, CourseInfo } from '@signalk/server-api'
 import { Application, Request, Response } from 'express'
 import { Notification, Watcher, WatchEvent } from './lib/alarms'
 import {
@@ -184,6 +184,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   // register DELTA stream message handler
   const initSubscriptions = (skPaths: string[]) => {
+    server.debug('Initialising Stream Subscriptions....')
     getPaths(skPaths)
 
     const subscription: SKDeltaSubscription = {
@@ -241,6 +242,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   // initialise calculation worker(s)
   const initWorkers = () => {
+    server.debug('Initialising worker thread....')
     worker = new Worker(path.resolve(__dirname, './worker/course.js'))
     worker.on('message', (msg) => {
       calcResult(msg)
@@ -255,6 +257,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   // initialise api endpoints
   const initEndpoints = () => {
+    server.debug('Initialising API endpoint(s)....')
     server.get(`${COURSE_CALCS_PATH}`, async (req: Request, res: Response) => {
       server.debug(`** GET ${COURSE_CALCS_PATH}`)
       const calcs =
@@ -278,11 +281,20 @@ module.exports = (server: CourseComputerApp): Plugin => {
   // ********* Course Calculations *******************
 
   // retrieve initial values of target paths
-  const getPaths = (paths: string[]) => {
+  const getPaths = async (paths: string[]) => {
     paths.forEach((path) => {
       const v = server.getSelfPath(path)
       srcPaths[path] = v?.value ?? null
     })
+    const ci = await server.getCourse()
+    server.debug(`*** getPaths() ${JSON.stringify(ci)}`)
+    if (ci) {
+      srcPaths['navigation.course.nextPoint'] = ci.nextPoint
+      srcPaths['navigation.course.previousPoint'] = ci.previousPoint
+      srcPaths['activeRoute'] = ci.activeRoute
+      const waypoints = await getWaypoints(activeRouteId)
+      srcPaths['activeRoute'].waypoints = waypoints
+    }
     server.debug(`[srcPaths]: ${JSON.stringify(srcPaths)}`)
   }
 
