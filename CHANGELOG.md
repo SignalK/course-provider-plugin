@@ -1,25 +1,31 @@
 # CHANGELOG: @signalk/course-provider
 
+## v1.2.0
+
+- **Added**: Route distance / time to go and eta at final destination to `calcValues`.
+- **Fixed**: Issue where route waypoints were not available for the distance calculation.
+- **Update**: Perpendicular passed notification message text.
+
 ## v1.1.1
 
-- **Fixed**: - Issue where magnetic bearing values fell outside of the 0-360 degree range.
+- **Fixed**: Issue where magnetic bearing values fell outside of the 0-360 degree range.
 
 ## v1.1.0
 
-- **Added**: - `performance.velocityMadeGoodToWaypoint`.
-- **Update**: - Use a value of _0_ when `navigation.magneticVariation` is undefined to ensure `bearingTrackMagnetic` & `bearingMagnetic` have a value.
+- **Added**: `performance.velocityMadeGoodToWaypoint`.
+- **Update**: Use a value of _0_ when `navigation.magneticVariation` is undefined to ensure `bearingTrackMagnetic` & `bearingMagnetic` have a value.
 
 ## v1.0.3
 
-- **Fixed**: - Value of `navigation.course.calcValues.calcMethod` being set to `undefined` when course is cleared.
+- **Fixed**: Value of `navigation.course.calcValues.calcMethod` being set to `undefined` when course is cleared.
 
 ## v1.0.2
 
-- **Fixed**: - Remove erroneous unit conversion in TTG calculation.
+- **Fixed**: Remove erroneous unit conversion in TTG calculation.
 
 ## v1.0.1
 
-- **Update**: - Change plugin catagory keyword to `signalk-category-utility`.
+- **Update**: Change plugin catagory keyword to `signalk-category-utility`.
 
 ## v1.0.0
 

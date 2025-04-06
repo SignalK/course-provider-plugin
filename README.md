@@ -20,6 +20,9 @@ This plugin populates the following course data paths found under `navigation.co
 - `timeToGo`
 - `estimatedTimeOfArrival`
 - `targetSpeed`
+- `route.distance`
+- `route.timeToGo`
+- `route.estimatedTimeOfArrival`
 
 AND
 - `performance.velocityMadeGoodToWaypoint`
