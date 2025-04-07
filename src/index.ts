@@ -292,8 +292,11 @@ module.exports = (server: CourseComputerApp): Plugin => {
       srcPaths['navigation.course.nextPoint'] = ci.nextPoint
       srcPaths['navigation.course.previousPoint'] = ci.previousPoint
       srcPaths['activeRoute'] = ci.activeRoute
-      const waypoints = await getWaypoints(activeRouteId)
-      srcPaths['activeRoute'].waypoints = waypoints
+      if (ci.activeRoute) {
+        activeRouteId = ci.activeRoute.href.split('/').slice(-1)[0]
+        const waypoints = await getWaypoints(activeRouteId)
+        srcPaths['activeRoute'].waypoints = waypoints
+      }
     }
     server.debug(`[srcPaths]: ${JSON.stringify(srcPaths)}`)
   }
