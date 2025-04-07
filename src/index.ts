@@ -107,7 +107,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   const srcPaths: SKPaths = {}
   let courseCalcs: CourseData
-  let activeRouteId: string = ''
+  let activeRouteId: string | undefined
 
   let metaSent = false
 
@@ -217,7 +217,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
               srcPaths[v.path] = v.value
               calc()
             } else if (v.path === 'navigation.course.activeRoute') {
-              handleActiveRoute(Object.assign({}, v.value))
+              handleActiveRoute(v.value ? { ...v.value } : null)
             } else if (v.path.startsWith('resources.route')) {
               handleRouteUpdate(v)
             } else {
@@ -312,9 +312,9 @@ module.exports = (server: CourseComputerApp): Plugin => {
   // resources.routes delta handler
   const handleRouteUpdate = async (msg: DeltaValue) => {
     server.debug(`*** handleRouteUpdate *** ${JSON.stringify(msg)}`)
-    if (msg.path.endsWith(activeRouteId)) {
+    if (msg.path.endsWith(activeRouteId as string)) {
       server.debug(`*** matched activeRouteId *** ${activeRouteId}`)
-      const waypoints = await getWaypoints(activeRouteId)
+      const waypoints = await getWaypoints(activeRouteId as string)
       srcPaths['activeRoute'].waypoints = waypoints
     }
   }
@@ -325,7 +325,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
     if (!value) {
       srcPaths['activeRoute'] = null
-      activeRouteId = ''
+      activeRouteId = undefined
       return
     }
     if (!activeRouteId) {
@@ -333,7 +333,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
     }
 
     if (value.href.includes(activeRouteId)) {
-      const waypoints = await getWaypoints(activeRouteId)
+      const waypoints = await getWaypoints(activeRouteId as string)
       srcPaths['activeRoute'] = Object.assign({}, value, {
         waypoints: waypoints
       })
