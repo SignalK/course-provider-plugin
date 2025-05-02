@@ -1,6 +1,6 @@
 {
     "name": "@signalk/course-provider",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "description": "Course data provider plugin for SignalK Server.",
     "main": "plugin/index.js",
     "keywords": [
@@ -30,10 +30,10 @@
         "format": "prettier --write src/*"
     },
     "dependencies": {
+        "@signalk/server-api": "^2.0.0",
         "rxjs": "^7.5.2"
     },
     "devDependencies": {
-        "@signalk/server-api": "^2.0.0",
         "@types/express": "^4.17.8",
         "@types/node-fetch": "^2.5.6",
         "prettier": "^2.6.0",
