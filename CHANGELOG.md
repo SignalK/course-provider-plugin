@@ -1,5 +1,9 @@
 # CHANGELOG: @signalk/course-provider
 
+## v1.2.1
+
+- **Fixed**: Added `@signalk/server-api` dependencies.
+
 ## v1.2.0
 
 - **Added**: Route distance / time to go and eta at final destination to `calcValues`.
