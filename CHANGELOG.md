@@ -1,5 +1,10 @@
 # CHANGELOG: @signalk/course-provider
 
+## v1.2.2
+
+- **Fixed**: VMC calculation to use COG instead of heading.
+- **Fixed**: VMG calculation.
+
 ## v1.2.1
 
 - **Fixed**: Added `@signalk/server-api` dependencies.

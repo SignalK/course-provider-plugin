@@ -70,6 +70,7 @@ function calcs(src: SKPaths): CourseData {
 
   const xte = vesselPosition?.crossTrackDistanceTo(startPoint, destination)
   const magVar = src['navigation.magneticVariation'] ?? 0.0
+  const vmgValue = vmg(src)
 
   // GreatCircle
   const bearingTrackTrue = toRadians(startPoint?.initialBearingTo(destination))
@@ -77,8 +78,9 @@ function calcs(src: SKPaths): CourseData {
   const bearingTrackMagnetic = compassAngle(bearingTrackTrue + magVar)
   const bearingMagnetic = compassAngle(bearingTrue + magVar)
   const gcDistance = vesselPosition?.distanceTo(destination)
-  const gcVmg = vmg(src, bearingTrue, 'true') // prefer 'true' values
-  const gcTime = timeCalcs(src, gcDistance, gcVmg as number, false)
+  const gcVmg = vmgValue
+  const gcVmc = vmc(src, bearingTrue, 'true') // for ETA, TTG - prefer 'true' values
+  const gcTime = timeCalcs(src, gcDistance, gcVmc as number, false)
 
   res.gc = {
     calcMethod: 'GreatCircle',
@@ -108,8 +110,9 @@ function calcs(src: SKPaths): CourseData {
   const rlBearingTrackMagnetic = compassAngle(rlBearingTrackTrue + magVar)
   const rlBearingMagnetic = compassAngle(rlBearingTrue + magVar)
   const rlDistance = vesselPosition?.rhumbDistanceTo(destination)
-  const rlVmg = vmg(src, rlBearingTrue, 'true') // prefer 'true' values
-  const rlTime = timeCalcs(src, rlDistance, rlVmg as number, true)
+  const rlVmg = vmgValue
+  const rlVmc = vmc(src, rlBearingTrue, 'true') // for ETA, TTG - prefer 'true' values
+  const rlTime = timeCalcs(src, rlDistance, rlVmc as number, true)
 
   res.rl = {
     calcMethod: 'Rhumbline',
@@ -143,24 +146,38 @@ function calcs(src: SKPaths): CourseData {
   return res
 }
 
-// Velocity Made Good to Course
-function vmg(
+// Velocity Made Good
+function vmg(src: SKPaths): number | null {
+  if (
+    typeof src['environment.wind.angleTrueGround'] !== 'number' ||
+    typeof src['navigation.speedOverGround'] !== 'number'
+  ) {
+    return null
+  }
+  return (
+    Math.cos(src['environment.wind.angleTrueGround']) *
+    src['navigation.speedOverGround']
+  )
+}
+
+// Velocity Made Good to Course (used for ETA / TTG calcs)
+function vmc(
   src: SKPaths,
   bearing: number,
   bearingType: 'true' | 'magnetic' = 'true'
 ): number | null {
-  const hdg =
+  const cog =
     bearingType === 'true'
-      ? src['navigation.headingTrue']
-      : src['navigation.headingMagnetic']
+      ? src['navigation.courseOverGroundTrue']
+      : src['navigation.courseOverGroundMagnetic']
   if (
-    typeof hdg !== 'number' ||
+    typeof cog !== 'number' ||
     typeof src['navigation.speedOverGround'] !== 'number'
   ) {
     return null
   }
 
-  return Math.cos(bearing - hdg) * src['navigation.speedOverGround']
+  return Math.cos(bearing - cog) * src['navigation.speedOverGround']
 }
 
 interface CourseTimes {
@@ -178,7 +195,7 @@ interface CourseTimes {
 function timeCalcs(
   src: SKPaths,
   distance: number,
-  vmg: number,
+  vmc: number,
   rhumbLine: boolean
 ): CourseTimes {
   const isRoute =
@@ -190,7 +207,7 @@ function timeCalcs(
     route: { ttg: null, eta: null, dtg: null }
   }
 
-  if (typeof distance !== 'number' || !vmg) {
+  if (typeof distance !== 'number' || !vmc) {
     return result
   }
 
@@ -200,14 +217,14 @@ function timeCalcs(
 
   const dateMsec = date.getTime()
 
-  const nextTtgMsec = Math.floor((distance / vmg) * 1000)
+  const nextTtgMsec = Math.floor((distance / vmc) * 1000)
   const nextEtaMsec = dateMsec + nextTtgMsec
   result.nextPoint.ttg = nextTtgMsec / 1000
   result.nextPoint.eta = new Date(nextEtaMsec).toISOString()
 
   if (isRoute) {
     const rteDistance = distance + routeRemaining(src, rhumbLine)
-    const routeTtgMsec = Math.floor((rteDistance / vmg) * 1000)
+    const routeTtgMsec = Math.floor((rteDistance / vmc) * 1000)
     const routeEtaMsec = dateMsec + routeTtgMsec
     result.route.ttg = routeTtgMsec / 1000
     result.route.eta = new Date(routeEtaMsec).toISOString()
