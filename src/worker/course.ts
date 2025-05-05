@@ -176,8 +176,7 @@ function vmc(
   ) {
     return null
   }
-
-  return Math.cos(bearing - cog) * src['navigation.speedOverGround']
+  return Math.cos(Math.abs(Angle.difference(bearing, cog))) * src['navigation.speedOverGround']
 }
 
 interface CourseTimes {
@@ -191,6 +190,7 @@ interface CourseTimes {
     dtg: number | null
   }
 }
+
 // Time to Go & Estimated time of arrival at the nextPoint / route destination
 function timeCalcs(
   src: SKPaths,
@@ -357,4 +357,36 @@ function toVector(origin: LatLon, end: LatLon): Vector {
     length: Math.sqrt(Math.pow(x, 2) + Math.pow(y, 2))
   }
   return v
+}
+
+class Angle {
+  /** difference between two angles (in radians)
+   * @param h: angle 1
+   * @param b: angle 2
+   * @returns angle (-ive = port)
+   */
+  static difference(h: number, b: number): number {
+    const d = (Math.PI*2) - b;
+    const hd = h + d;
+    const a = Angle.normalise(hd);
+    return a < Math.PI ? 0 - a : (Math.PI*2) - a;
+  }
+
+  /** Add two angles (in radians)
+   * @param h: angle 1
+   * @param b: angle 2 
+   * @returns sum angle
+   */
+  static add(h: number, b: number): number {
+    return Angle.normalise(h + b);
+  }
+
+  /** Normalises angle to a value between 0 & 2Pi radians
+   * @param a: angle
+   * @returns value between 0-2Pi
+   */
+  static normalise(a: number): number {
+    const pi2 = (Math.PI*2)
+    return a < 0 ? a + pi2 : a >= pi2 ? a - pi2 : a;
+  }
 }
