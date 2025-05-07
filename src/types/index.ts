@@ -14,6 +14,7 @@ export interface CourseResult {
   bearingTrue?: number | null
   bearingMagnetic?: number | null
   velocityMadeGood?: number | null
+  velocityMadeGoodToCourse?: number | null
   timeToGo?: number | null
   estimatedTimeOfArrival?: string | null
   previousPoint?: {

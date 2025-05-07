@@ -91,6 +91,7 @@ function calcs(src: SKPaths): CourseData {
     bearingTrue: bearingTrue,
     bearingMagnetic: bearingMagnetic,
     velocityMadeGood: gcVmg,
+    velocityMadeGoodToCourse: gcVmc,
     timeToGo: gcTime.nextPoint.ttg,
     estimatedTimeOfArrival: gcTime.nextPoint.eta,
     previousPoint: {
@@ -123,6 +124,7 @@ function calcs(src: SKPaths): CourseData {
     bearingTrue: rlBearingTrue,
     bearingMagnetic: rlBearingMagnetic,
     velocityMadeGood: rlVmg,
+    velocityMadeGoodToCourse: rlVmc,
     timeToGo: rlTime.nextPoint.ttg,
     estimatedTimeOfArrival: rlTime.nextPoint.eta,
     previousPoint: {
