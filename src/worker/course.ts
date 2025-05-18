@@ -148,7 +148,7 @@ function calcs(src: SKPaths): CourseData {
   return res
 }
 
-// Velocity Made Good
+// Velocity Made Good to wind
 function vmg(src: SKPaths): number | null {
   if (
     typeof src['environment.wind.angleTrueGround'] !== 'number' ||

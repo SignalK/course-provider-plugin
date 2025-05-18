@@ -442,9 +442,9 @@ module.exports = (server: CourseComputerApp): Plugin => {
     values.push({
       path: `${calcPath}.velocityMadeGood`,
       value:
-        typeof source?.velocityMadeGood === 'undefined'
+        typeof source?.velocityMadeGoodToCourse === 'undefined'
           ? null
-          : source?.velocityMadeGood
+          : source?.velocityMadeGoodToCourse
     })
     values.push({
       path: `performance.velocityMadeGoodToWaypoint`,

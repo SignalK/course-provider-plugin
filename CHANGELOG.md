@@ -1,5 +1,9 @@
 # CHANGELOG: @signalk/course-provider
 
+## v1.2.3
+
+- **Fixed**: Use VMC calculation for both `course.velocityMadeGood` and `performance.velocityMadeGoodToWaypoint`.
+
 ## v1.2.2
 
 - **Fixed**: VMC calculation to use COG instead of heading.
