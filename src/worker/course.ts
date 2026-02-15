@@ -209,7 +209,13 @@ function timeCalcs(
     route: { ttg: null, eta: null, dtg: null }
   }
 
-  if (typeof distance !== 'number' || !vmc) {
+  if (
+    typeof distance !== 'number' ||
+    !Number.isFinite(distance) ||
+    typeof vmc !== 'number' ||
+    !Number.isFinite(vmc) ||
+    vmc <= 0
+  ) {
     return result
   }
 
@@ -218,6 +224,10 @@ function timeCalcs(
     : new Date()
 
   const dateMsec = date.getTime()
+
+  if (!Number.isFinite(dateMsec)) {
+    return result
+  }
 
   const nextTtgMsec = Math.floor((distance / vmc) * 1000)
   const nextEtaMsec = dateMsec + nextTtgMsec
@@ -243,6 +253,7 @@ function targetSpeed(
 ): number | null {
   if (
     typeof distance !== 'number' ||
+    !Number.isFinite(distance) ||
     !src['navigation.course.targetArrivalTime']
   ) {
     return null
@@ -257,8 +268,14 @@ function targetSpeed(
     ? new Date(src['navigation.datetime'])
     : new Date()
   const dateMsec = date.getTime()
+  if (!Number.isFinite(dateMsec)) {
+    return null
+  }
   const tat = new Date(src['navigation.course.targetArrivalTime'])
   const tatMsec = tat.getTime()
+  if (!Number.isFinite(tatMsec)) {
+    return null
+  }
   if (tatMsec <= dateMsec) {
     // current time is after targetArrivalTime
     return null
@@ -391,4 +408,13 @@ class Angle {
     const pi2 = (Math.PI*2)
     return a < 0 ? a + pi2 : a >= pi2 ? a - pi2 : a;
   }
+}
+
+export {
+  parseSKPaths,
+  vmg,
+  vmc,
+  timeCalcs,
+  targetSpeed,
+  routeRemaining
 }
