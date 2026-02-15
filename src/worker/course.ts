@@ -320,7 +320,7 @@ function routeRemaining(src: SKPaths, rhumbLine?: boolean): number {
   // sum segment lengths
   let wpts = src['activeRoute'].waypoints
   let rteLen = 0
-  for (let idx = fromIndex; idx < lastIndex; idx++) {
+  for (let idx = fromIndex; idx < toIndex; idx++) {
     let pt = new LatLon(wpts[idx][1], wpts[idx][0])
     if (rhumbLine) {
       rteLen += pt.rhumbDistanceTo(
