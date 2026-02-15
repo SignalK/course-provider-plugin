@@ -178,7 +178,10 @@ function vmc(
   ) {
     return null
   }
-  return Math.cos(Math.abs(Angle.difference(bearing, cog))) * src['navigation.speedOverGround']
+  return (
+    Math.cos(Math.abs(Angle.difference(bearing, cog))) *
+    src['navigation.speedOverGround']
+  )
 }
 
 interface CourseTimes {
@@ -385,19 +388,19 @@ class Angle {
    * @returns angle (-ive = port)
    */
   static difference(h: number, b: number): number {
-    const d = (Math.PI*2) - b;
-    const hd = h + d;
-    const a = Angle.normalise(hd);
-    return a < Math.PI ? 0 - a : (Math.PI*2) - a;
+    const d = Math.PI * 2 - b
+    const hd = h + d
+    const a = Angle.normalise(hd)
+    return a < Math.PI ? 0 - a : Math.PI * 2 - a
   }
 
   /** Add two angles (in radians)
    * @param h: angle 1
-   * @param b: angle 2 
+   * @param b: angle 2
    * @returns sum angle
    */
   static add(h: number, b: number): number {
-    return Angle.normalise(h + b);
+    return Angle.normalise(h + b)
   }
 
   /** Normalises angle to a value between 0 & 2Pi radians
@@ -405,16 +408,9 @@ class Angle {
    * @returns value between 0-2Pi
    */
   static normalise(a: number): number {
-    const pi2 = (Math.PI*2)
-    return a < 0 ? a + pi2 : a >= pi2 ? a - pi2 : a;
+    const pi2 = Math.PI * 2
+    return a < 0 ? a + pi2 : a >= pi2 ? a - pi2 : a
   }
 }
 
-export {
-  parseSKPaths,
-  vmg,
-  vmc,
-  timeCalcs,
-  targetSpeed,
-  routeRemaining
-}
+export { parseSKPaths, vmg, vmc, timeCalcs, targetSpeed, routeRemaining }

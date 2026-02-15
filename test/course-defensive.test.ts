@@ -8,7 +8,9 @@ describe('course calculations defensive guards', () => {
   it('parseSKPaths returns false when required positions are missing', async () => {
     const { parseSKPaths } = await import('../src/worker/course')
     const src = {
-      'navigation.course.nextPoint': { position: { latitude: 1, longitude: 2 } },
+      'navigation.course.nextPoint': {
+        position: { latitude: 1, longitude: 2 }
+      },
       'navigation.course.previousPoint': {
         position: { latitude: 1, longitude: 2 }
       }

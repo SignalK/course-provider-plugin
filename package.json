@@ -22,13 +22,15 @@
     "license": "Apache-2.0",
     "scripts": {
         "build": "tsc",
+        "typecheck": "tsc --noEmit",
         "build-declaration": "tsc --declaration --allowJs false",
         "watch": "npm run build -- -w",
         "test": "vitest run",
         "test:watch": "vitest",
         "start": "npm run build -- -w",
         "prepublishOnly": "tsc",
-        "format": "prettier --write src/*"
+        "format": "prettier --write \"src/**/*.{ts,js}\" \"test/**/*.ts\"",
+        "lint": "prettier --check \"src/**/*.{ts,js}\" \"test/**/*.ts\""
     },
     "dependencies": {
         "@signalk/server-api": "^2.0.0",
