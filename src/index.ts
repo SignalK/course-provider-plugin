@@ -140,11 +140,19 @@ module.exports = (server: CourseComputerApp): Plugin => {
   const doStartup = (options: any) => {
     try {
       server.debug(`${plugin.name} starting.......`)
-      if (
-        typeof options.notifications?.sound !== 'undefined' &&
-        typeof options.calculations?.method !== 'undefined'
-      ) {
-        config = options
+      config = {
+        notifications: {
+          sound:
+            typeof options.notifications?.sound !== 'undefined'
+              ? options.notifications.sound
+              : config.notifications.sound
+        },
+        calculations: {
+          method:
+            typeof options.calculations?.method !== 'undefined'
+              ? options.calculations.method
+              : config.calculations.method
+        }
       }
 
       server.debug(`Applied config: ${JSON.stringify(config)}`)
