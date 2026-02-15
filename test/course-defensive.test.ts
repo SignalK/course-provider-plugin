@@ -46,6 +46,17 @@ describe('course calculations defensive guards', () => {
     expect(result.nextPoint.eta).toBeNull()
   })
 
+  it('timeCalcs returns empty results when vmc is zero', async () => {
+    const { timeCalcs } = await import('../src/worker/course')
+    const src = {
+      'navigation.datetime': '2020-01-01T00:00:00.000Z'
+    }
+    const result = timeCalcs(src, 100, 0, false)
+
+    expect(result.nextPoint.ttg).toBeNull()
+    expect(result.nextPoint.eta).toBeNull()
+  })
+
   it('targetSpeed returns null for invalid targetArrivalTime', async () => {
     const { targetSpeed } = await import('../src/worker/course')
     const src = {
