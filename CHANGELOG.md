@@ -1,5 +1,10 @@
 # CHANGELOG: @signalk/course-provider
 
+## v1.2.4
+
+- **Fixed**: Calculation of remaining distance to travel foon current route.
+- **Fixed**: Worker termination.
+
 ## v1.2.3
 
 - **Fixed**: Use VMC calculation for both `course.velocityMadeGood` and `performance.velocityMadeGoodToWaypoint`.

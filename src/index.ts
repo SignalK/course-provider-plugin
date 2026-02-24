@@ -185,7 +185,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
     if (worker) {
       server.debug('** Stopping Worker(s) **')
       worker.removeAllListeners()
-      void worker.terminate()
+      worker.terminate()
       worker = null
     }
     const msg = 'Stopped'
@@ -265,6 +265,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
         console.error('** worker.exit:', `Stopped with exit code ${code}`)
       }
     })
+    worker.unref()
   }
 
   // initialise api endpoints

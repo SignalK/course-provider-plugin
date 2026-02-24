@@ -227,6 +227,9 @@ function timeCalcs(
     : new Date()
 
   const dateMsec = date.getTime()
+  if (!Number.isFinite(dateMsec)) {
+    return result
+  }
 
   if (!Number.isFinite(dateMsec)) {
     return result
@@ -270,10 +273,12 @@ function targetSpeed(
   const date: Date = src['navigation.datetime']
     ? new Date(src['navigation.datetime'])
     : new Date()
+
   const dateMsec = date.getTime()
   if (!Number.isFinite(dateMsec)) {
     return null
   }
+
   const tat = new Date(src['navigation.course.targetArrivalTime'])
   const tatMsec = tat.getTime()
   if (!Number.isFinite(tatMsec)) {
