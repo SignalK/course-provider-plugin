@@ -178,7 +178,10 @@ function vmc(
   ) {
     return null
   }
-  return Math.cos(Math.abs(Angle.difference(bearing, cog))) * src['navigation.speedOverGround']
+  return (
+    Math.cos(Math.abs(Angle.difference(bearing, cog))) *
+    src['navigation.speedOverGround']
+  )
 }
 
 interface CourseTimes {
@@ -209,7 +212,13 @@ function timeCalcs(
     route: { ttg: null, eta: null, dtg: null }
   }
 
-  if (typeof distance !== 'number' || !vmc) {
+  if (
+    typeof distance !== 'number' ||
+    !Number.isFinite(distance) ||
+    typeof vmc !== 'number' ||
+    !Number.isFinite(vmc) ||
+    vmc <= 0
+  ) {
     return result
   }
 
@@ -218,6 +227,9 @@ function timeCalcs(
     : new Date()
 
   const dateMsec = date.getTime()
+  if (!Number.isFinite(dateMsec)) {
+    return result
+  }
 
   const nextTtgMsec = Math.floor((distance / vmc) * 1000)
   const nextEtaMsec = dateMsec + nextTtgMsec
@@ -243,6 +255,7 @@ function targetSpeed(
 ): number | null {
   if (
     typeof distance !== 'number' ||
+    !Number.isFinite(distance) ||
     !src['navigation.course.targetArrivalTime']
   ) {
     return null
@@ -256,9 +269,17 @@ function targetSpeed(
   const date: Date = src['navigation.datetime']
     ? new Date(src['navigation.datetime'])
     : new Date()
+
   const dateMsec = date.getTime()
+  if (!Number.isFinite(dateMsec)) {
+    return null
+  }
+
   const tat = new Date(src['navigation.course.targetArrivalTime'])
   const tatMsec = tat.getTime()
+  if (!Number.isFinite(tatMsec)) {
+    return null
+  }
   if (tatMsec <= dateMsec) {
     // current time is after targetArrivalTime
     return null
@@ -303,7 +324,7 @@ function routeRemaining(src: SKPaths, rhumbLine?: boolean): number {
   // sum segment lengths
   let wpts = src['activeRoute'].waypoints
   let rteLen = 0
-  for (let idx = fromIndex; idx < lastIndex; idx++) {
+  for (let idx = fromIndex; idx < toIndex; idx++) {
     let pt = new LatLon(wpts[idx][1], wpts[idx][0])
     if (rhumbLine) {
       rteLen += pt.rhumbDistanceTo(
@@ -368,19 +389,19 @@ class Angle {
    * @returns angle (-ive = port)
    */
   static difference(h: number, b: number): number {
-    const d = (Math.PI*2) - b;
-    const hd = h + d;
-    const a = Angle.normalise(hd);
-    return a < Math.PI ? 0 - a : (Math.PI*2) - a;
+    const d = Math.PI * 2 - b
+    const hd = h + d
+    const a = Angle.normalise(hd)
+    return a < Math.PI ? 0 - a : Math.PI * 2 - a
   }
 
   /** Add two angles (in radians)
    * @param h: angle 1
-   * @param b: angle 2 
+   * @param b: angle 2
    * @returns sum angle
    */
   static add(h: number, b: number): number {
-    return Angle.normalise(h + b);
+    return Angle.normalise(h + b)
   }
 
   /** Normalises angle to a value between 0 & 2Pi radians
@@ -388,7 +409,7 @@ class Angle {
    * @returns value between 0-2Pi
    */
   static normalise(a: number): number {
-    const pi2 = (Math.PI*2)
-    return a < 0 ? a + pi2 : a >= pi2 ? a - pi2 : a;
+    const pi2 = Math.PI * 2
+    return a < 0 ? a + pi2 : a >= pi2 ? a - pi2 : a
   }
 }
