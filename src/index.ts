@@ -102,7 +102,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
   watchPassedDest.rangeMax = 2
   let unsubscribes: any[] = [] // delta stream subscriptions
   let obs: any[] = [] // Observables subscription
-  let worker: Worker
+  let worker: Worker | null = null
 
   const SIGNALK_API_PATH = `/signalk/v2/api`
   const COURSE_CALCS_PATH = `${SIGNALK_API_PATH}/vessels/self/navigation/course/calcValues`
@@ -176,7 +176,9 @@ module.exports = (server: CourseComputerApp): Plugin => {
     obs = []
     if (worker) {
       server.debug('** Stopping Worker(s) **')
-      worker.unref()
+      worker.removeAllListeners()
+      worker.terminate()
+      worker = null
     }
     const msg = 'Stopped'
     server.setPluginStatus(msg)
@@ -255,6 +257,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
         console.error('** worker.exit:', `Stopped with exit code ${code}`)
       }
     })
+    worker.unref()
   }
 
   // initialise api endpoints
