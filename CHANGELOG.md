@@ -1,5 +1,10 @@
 # CHANGELOG: @signalk/course-provider
 
+## v1.2.5
+
+- **Fixed**: Updated passed perpendicular calculation (#8).
+- **Chore**: Added tests.
+
 ## v1.2.4
 
 - **Fixed**: Calculation of remaining distance to travel of current route.
