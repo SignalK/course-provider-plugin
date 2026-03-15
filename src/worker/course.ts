@@ -17,7 +17,7 @@ parentPort?.on('message', (message: SKPaths) => {
   }
 })
 
-function parseSKPaths(src: SKPaths): boolean {
+export function parseSKPaths(src: SKPaths): boolean {
   return src['navigation.position'] &&
     src['navigation.course.nextPoint']?.position &&
     src['navigation.course.previousPoint']?.position
@@ -149,7 +149,7 @@ function calcs(src: SKPaths): CourseData {
 }
 
 // Velocity Made Good to wind
-function vmg(src: SKPaths): number | null {
+export function vmg(src: SKPaths): number | null {
   if (
     typeof src['environment.wind.angleTrueGround'] !== 'number' ||
     typeof src['navigation.speedOverGround'] !== 'number'
@@ -163,7 +163,7 @@ function vmg(src: SKPaths): number | null {
 }
 
 // Velocity Made Good to Course (used for ETA / TTG calcs)
-function vmc(
+export function vmc(
   src: SKPaths,
   bearing: number,
   bearingType: 'true' | 'magnetic' = 'true'
@@ -197,7 +197,7 @@ interface CourseTimes {
 }
 
 // Time to Go & Estimated time of arrival at the nextPoint / route destination
-function timeCalcs(
+export function timeCalcs(
   src: SKPaths,
   distance: number,
   vmc: number,
@@ -248,7 +248,7 @@ function timeCalcs(
 }
 
 // Avg speed required to arrive at destination at targetArrivalTime
-function targetSpeed(
+export function targetSpeed(
   src: SKPaths,
   distance: number,
   rhumbLine?: boolean

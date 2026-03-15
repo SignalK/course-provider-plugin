@@ -2,7 +2,7 @@
 
 ## v1.2.4
 
-- **Fixed**: Calculation of remaining distance to travel foon current route.
+- **Fixed**: Calculation of remaining distance to travel of current route.
 - **Fixed**: Worker termination.
 
 ## v1.2.3
