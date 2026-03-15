@@ -25,9 +25,9 @@ export function parseSKPaths(src: SKPaths): boolean {
     : false
 }
 
-function toRadians(value: number) {
-  return (value * Math.PI) / 180
-}
+const toRadians = (degrees: number) => (degrees * Math.PI) / 180
+
+const toDegrees = (radians: number) => (180 / Math.PI) * radians
 
 /** Normalises angle to a value within the range of a compass
  * @param angle: angle (in radians)
@@ -338,48 +338,15 @@ function routeRemaining(src: SKPaths, rhumbLine?: boolean): number {
 }
 
 // return true if vessel is past perpendicular of destination
-function passedPerpendicular(
+export function passedPerpendicular(
   vesselPosition: LatLon,
   destination: LatLon,
   startPoint: LatLon
 ): boolean {
-  const va = toVector(destination, vesselPosition)
-  const vb = toVector(destination, startPoint)
-  const rad = Math.acos((va.x * vb.x + va.y * vb.y) / (va.length * vb.length))
-  const deg = (180 / Math.PI) * rad
-  return deg > 90 ? true : false
-}
-
-interface Vector {
-  x: number
-  y: number
-  length: number
-}
-
-function toVector(origin: LatLon, end: LatLon): Vector {
-  // calc longitudinal difference (inc dateline transition)
-  function xDiff(a: number, b: number): number {
-    let bx: number
-    if (a > 170 && b < 0) {
-      // E->W transition
-      bx = a + (180 - a) + (180 + b)
-    } else if (a < -170 && b > 0) {
-      // W->E transition
-      bx = a - (180 + a) - (180 - b)
-    } else {
-      bx = b
-    }
-    return bx - a
-  }
-
-  const x = xDiff(origin.longitude, end.longitude)
-  const y = end.latitude - origin.latitude
-  const v: Vector = {
-    x: x,
-    y: y,
-    length: Math.sqrt(Math.pow(x, 2) + Math.pow(y, 2))
-  }
-  return v
+  const ds = destination.initialBearingTo(startPoint)
+  const dv = destination.initialBearingTo(vesselPosition)
+  const diff = toDegrees(Angle.difference(toRadians(ds), toRadians(dv)))
+  return Math.abs(diff) > 90
 }
 
 class Angle {
