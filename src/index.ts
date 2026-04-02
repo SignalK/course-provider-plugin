@@ -667,6 +667,9 @@ module.exports = (server: CourseComputerApp): Plugin => {
   // ********* Passed Destination events *****************
   const onPassedDestEvent = (event: WatchEvent) => {
     server.debug(JSON.stringify(event))
+    const alarmMethod = config.notifications.sound
+      ? [ALARM_METHOD.sound, ALARM_METHOD.visual]
+      : [ALARM_METHOD.visual]
     if (event.type === 'enter') {
       if (srcPaths['navigation.position']) {
         emitNotification(
@@ -676,7 +679,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
               ? 'Next Point perpendicular has been passed.'
               : '',
             ALARM_STATE.alert,
-            []
+            alarmMethod
           )
         )
       }
