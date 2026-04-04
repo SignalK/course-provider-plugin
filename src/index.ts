@@ -65,7 +65,7 @@ const CONFIG_UISCHEMA = {
   notifications: {
     sound: {
       'ui:widget': 'checkbox',
-      'ui:title': ' ',
+      'ui:title': 'Enable sound',
       'ui:help': ''
     }
   },
