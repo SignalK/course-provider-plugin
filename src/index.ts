@@ -221,7 +221,11 @@ module.exports = (server: CourseComputerApp): Plugin => {
               srcPaths[v.path] = v.value
               calc()
             } else if (v.path === 'navigation.course.activeRoute') {
-              handleActiveRoute(v.value ? { ...v.value } : null)
+              // Pass the delta value by reference. handleActiveRoute stores
+              // its own fresh object via Object.assign({}, value, {waypoints})
+              // so srcPaths never points at the upstream delta value, and no
+              // later code path mutates `value` in place.
+              handleActiveRoute(v.value ?? null)
             } else if (v.path.startsWith('resources.route')) {
               handleRouteUpdate(v)
             } else {
