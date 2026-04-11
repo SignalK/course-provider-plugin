@@ -20,6 +20,9 @@ interface SKDeltaSubscription {
 }
 
 interface CourseComputerApp extends Application, ServerAPI {
+  // `debug` at runtime is the `debug` npm module instance; its `enabled`
+  // flag is toggled live by the SignalK Admin UI.
+  debug: ((msg: any, ...args: any[]) => void) & { enabled?: boolean }
   subscriptionmanager: {
     subscribe: (
       subscribe: SKDeltaSubscription,
@@ -215,9 +218,11 @@ module.exports = (server: CourseComputerApp): Plugin => {
           }
           u.values.forEach((v: DeltaValue) => {
             if (v.path === 'navigation.position') {
-              server.debug(
-                `navigation.position ${JSON.stringify(v.value)} => calc()`
-              )
+              if (server.debug.enabled) {
+                server.debug(
+                  `navigation.position ${JSON.stringify(v.value)} => calc()`
+                )
+              }
               srcPaths[v.path] = v.value
               calc()
             } else if (v.path === 'navigation.course.activeRoute') {
@@ -350,13 +355,17 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   // trigger course calculations
   const calc = () => {
-    server.debug(
-      `*** navigation.position *** ${JSON.stringify(
-        srcPaths['navigation.position']
-      )}`
-    )
+    if (server.debug.enabled) {
+      server.debug(
+        `*** navigation.position *** ${JSON.stringify(
+          srcPaths['navigation.position']
+        )}`
+      )
+    }
     if (srcPaths['navigation.position']) {
-      server.debug(JSON.stringify(srcPaths))
+      if (server.debug.enabled) {
+        server.debug(JSON.stringify(srcPaths))
+      }
       worker?.postMessage(srcPaths)
     } else {
       server.debug('No vessel position.....Skipping calc()')
@@ -366,7 +375,9 @@ module.exports = (server: CourseComputerApp): Plugin => {
   // send calculation results delta
   const calcResult = async (result: CourseData) => {
     server.debug(`*** calculation result ***`)
-    server.debug(JSON.stringify(result))
+    if (server.debug.enabled) {
+      server.debug(JSON.stringify(result))
+    }
     watchArrival.rangeMax = srcPaths['navigation.course.arrivalCircle'] ?? -1
     watchArrival.value = result.gc?.distance ?? -1
     watchPassedDest.value = result.passedPerpendicular ? 1 : 0
