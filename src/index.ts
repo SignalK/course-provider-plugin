@@ -1,6 +1,7 @@
 import { Plugin, ServerAPI, SKVersion, CourseInfo } from '@signalk/server-api'
 import { Application, Request, Response } from 'express'
 import { Notification, Watcher, WatchEvent } from './lib/alarms'
+import { buildDeltaMsg, CalcMethod } from './lib/delta-msg'
 import {
   CourseData,
   SKPaths,
@@ -373,7 +374,10 @@ module.exports = (server: CourseComputerApp): Plugin => {
     courseCalcs = result
     server.handleMessage(
       plugin.id,
-      buildDeltaMsg(courseCalcs as CourseData),
+      buildDeltaMsg(
+        courseCalcs as CourseData,
+        config.calculations.method as CalcMethod
+      ),
       SKVersion.v2
     )
     server.debug(`*** course data delta sent***`)
@@ -381,127 +385,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
       server.handleMessage(plugin.id, buildMetaDeltaMsg(), SKVersion.v2)
       server.debug(`*** meta delta sent***`)
       metaSent = true
-    }
-  }
-
-  const buildDeltaMsg = (course: CourseData): any => {
-    const values: Array<{ path: string; value: any }> = []
-    const calcPath = 'navigation.course.calcValues'
-    const source =
-      config.calculations.method === 'Rhumbline' ? course.rl : course.gc
-
-    server.debug(`*** building course data delta ***`)
-    values.push({
-      path: `${calcPath}.calcMethod`,
-      value: config.calculations.method
-    })
-    values.push({
-      path: `${calcPath}.bearingTrackTrue`,
-      value:
-        typeof source.bearingTrackTrue === 'undefined'
-          ? null
-          : source.bearingTrackTrue
-    })
-    values.push({
-      path: `${calcPath}.bearingTrackMagnetic`,
-      value:
-        typeof source.bearingTrackMagnetic === 'undefined'
-          ? null
-          : source.bearingTrackMagnetic
-    })
-    values.push({
-      path: `${calcPath}.crossTrackError`,
-      value:
-        typeof source.crossTrackError === 'undefined'
-          ? null
-          : source.crossTrackError
-    })
-
-    values.push({
-      path: `${calcPath}.previousPoint.distance`,
-      value:
-        typeof source.previousPoint?.distance === 'undefined'
-          ? null
-          : source.previousPoint?.distance
-    })
-
-    values.push({
-      path: `${calcPath}.distance`,
-      value: typeof source?.distance === 'undefined' ? null : source?.distance
-    })
-    values.push({
-      path: `${calcPath}.bearingTrue`,
-      value:
-        typeof source?.bearingTrue === 'undefined' ? null : source?.bearingTrue
-    })
-    values.push({
-      path: `${calcPath}.bearingMagnetic`,
-      value:
-        typeof source?.bearingMagnetic === 'undefined'
-          ? null
-          : source?.bearingMagnetic
-    })
-
-    values.push({
-      path: `${calcPath}.velocityMadeGood`,
-      value:
-        typeof source?.velocityMadeGoodToCourse === 'undefined'
-          ? null
-          : source?.velocityMadeGoodToCourse
-    })
-    values.push({
-      path: `performance.velocityMadeGoodToWaypoint`,
-      value:
-        typeof source?.velocityMadeGoodToCourse === 'undefined'
-          ? null
-          : source?.velocityMadeGoodToCourse
-    })
-    values.push({
-      path: `${calcPath}.timeToGo`,
-      value: typeof source?.timeToGo === 'undefined' ? null : source?.timeToGo
-    })
-    values.push({
-      path: `${calcPath}.estimatedTimeOfArrival`,
-      value:
-        typeof source?.estimatedTimeOfArrival === 'undefined'
-          ? null
-          : source?.estimatedTimeOfArrival
-    })
-
-    values.push({
-      path: `${calcPath}.route.timeToGo`,
-      value:
-        typeof source?.route?.timeToGo === 'undefined'
-          ? null
-          : source?.route?.timeToGo
-    })
-    values.push({
-      path: `${calcPath}.route.estimatedTimeOfArrival`,
-      value:
-        typeof source?.route?.estimatedTimeOfArrival === 'undefined'
-          ? null
-          : source?.route?.estimatedTimeOfArrival
-    })
-    values.push({
-      path: `${calcPath}.route.distance`,
-      value:
-        typeof source?.route?.distance === 'undefined'
-          ? null
-          : source?.route?.distance
-    })
-
-    values.push({
-      path: `${calcPath}.targetSpeed`,
-      value:
-        typeof source?.targetSpeed === 'undefined' ? null : source?.targetSpeed
-    })
-
-    return {
-      updates: [
-        {
-          values: values
-        }
-      ]
     }
   }
 
