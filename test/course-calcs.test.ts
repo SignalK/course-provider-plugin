@@ -118,3 +118,84 @@ describe('calcs computes only the configured method (task 3)', () => {
     })
   })
 })
+
+describe('track bearing cache (task 4)', () => {
+  it('skips the prev->next bearing call on a cached tick', async () => {
+    const { LatLonSpherical } = (await import(
+      '../src/lib/geodesy/latlon-spherical.js'
+    )) as any
+    const { calcs } = (await import('../src/worker/course')) as any
+
+    calcs(srcWithFix(), 'GreatCircle')
+
+    const spy = vi.spyOn(LatLonSpherical.prototype, 'initialBearingTo')
+    calcs(srcWithFix(), 'GreatCircle')
+
+    // Cache warm: bearingTrue (1) + passedPerpendicular (2) = 3.
+    // The track bearing (previousPoint -> nextPoint) is served from cache.
+    expect(spy).toHaveBeenCalledTimes(3)
+  })
+
+  it('recomputes the track bearing when nextPoint changes', async () => {
+    const { LatLonSpherical } = (await import(
+      '../src/lib/geodesy/latlon-spherical.js'
+    )) as any
+    const { calcs } = (await import('../src/worker/course')) as any
+
+    calcs(srcWithFix(), 'GreatCircle')
+
+    const spy = vi.spyOn(LatLonSpherical.prototype, 'initialBearingTo')
+    // Change latitude only — keeps stub bearings (lon-driven) unchanged so
+    // the downstream timeCalcs math stays well-defined, while the cache key
+    // (nextLat) still differs and forces a recompute.
+    calcs(srcWithFix({ next: { latitude: 0.5, longitude: 1 } }), 'GreatCircle')
+
+    // Cache miss: track (1) + bearingTrue (1) + passedPerpendicular (2) = 4.
+    expect(spy).toHaveBeenCalledTimes(4)
+  })
+
+  it('recomputes the track bearing when previousPoint changes', async () => {
+    const { LatLonSpherical } = (await import(
+      '../src/lib/geodesy/latlon-spherical.js'
+    )) as any
+    const { calcs } = (await import('../src/worker/course')) as any
+
+    calcs(srcWithFix(), 'GreatCircle')
+
+    const spy = vi.spyOn(LatLonSpherical.prototype, 'initialBearingTo')
+    // Shift previousPoint latitude. The cache key (prevLat) differs so the
+    // track bearing must be recomputed even though nextPoint is unchanged.
+    const moved = srcWithFix()
+    moved['navigation.course.previousPoint'].position.latitude = 0.5
+    calcs(moved, 'GreatCircle')
+
+    expect(spy).toHaveBeenCalledTimes(4)
+  })
+
+  it('recomputes the magnetic track bearing when magneticVariation changes', async () => {
+    const { calcs } = (await import('../src/worker/course')) as any
+
+    const a = calcs(srcWithFix({ magVar: 0 }), 'GreatCircle')
+    const b = calcs(srcWithFix({ magVar: 0.1 }), 'GreatCircle')
+
+    expect(b.gc.bearingTrackTrue).toBe(a.gc.bearingTrackTrue)
+    expect(b.gc.bearingTrackMagnetic).not.toBe(a.gc.bearingTrackMagnetic)
+  })
+
+  it('recomputes when switching method (gc <-> rl)', async () => {
+    const { LatLonSpherical } = (await import(
+      '../src/lib/geodesy/latlon-spherical.js'
+    )) as any
+    const { calcs } = (await import('../src/worker/course')) as any
+
+    calcs(srcWithFix(), 'GreatCircle')
+
+    const rhumbSpy = vi.spyOn(LatLonSpherical.prototype, 'rhumbBearingTo')
+    const result = calcs(srcWithFix(), 'Rhumbline')
+
+    // Switching method invalidates the track bearing cache so the rhumb
+    // bearing has to be computed: rhumbBearingTo for both track and bearing.
+    expect(rhumbSpy).toHaveBeenCalledTimes(2)
+    expect(result.gc).toEqual({})
+  })
+})

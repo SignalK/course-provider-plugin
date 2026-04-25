@@ -7,6 +7,11 @@
  * needs to publish. Only the configured branch is computed; the unused
  * branch is returned empty so existing callers can still index by `gc`/`rl`
  * without conditional access.
+ *
+ * The track bearing (previousPoint -> nextPoint) is cached across ticks
+ * because it depends only on the route endpoints and magneticVariation, not
+ * on vessel position. The cache is invalidated whenever any of those keys
+ * change.
  */
 
 import { parentPort } from 'worker_threads'
@@ -66,6 +71,61 @@ function compassAngle(angle: number): number {
     : angle
 }
 
+// Track bearing (previousPoint -> nextPoint) cache. The bearing depends only
+// on the route endpoints and magneticVariation, never on vessel position, so
+// it can be reused across ticks until any of those change.
+interface TrackBearingCache {
+  prevLat: number
+  prevLon: number
+  nextLat: number
+  nextLon: number
+  magVar: number
+  rhumbLine: boolean
+  bearingTrackTrue: number
+  bearingTrackMagnetic: number
+}
+let trackBearingCache: TrackBearingCache | null = null
+
+function trackBearings(
+  startPoint: LatLon,
+  destination: LatLon,
+  magVar: number,
+  rhumbLine: boolean
+): { bearingTrackTrue: number; bearingTrackMagnetic: number } {
+  const c = trackBearingCache
+  if (
+    c &&
+    c.rhumbLine === rhumbLine &&
+    c.magVar === magVar &&
+    c.prevLat === startPoint.lat &&
+    c.prevLon === startPoint.lon &&
+    c.nextLat === destination.lat &&
+    c.nextLon === destination.lon
+  ) {
+    return {
+      bearingTrackTrue: c.bearingTrackTrue,
+      bearingTrackMagnetic: c.bearingTrackMagnetic
+    }
+  }
+  const bearingTrackTrue = toRadians(
+    rhumbLine
+      ? startPoint.rhumbBearingTo(destination)
+      : startPoint.initialBearingTo(destination)
+  )
+  const bearingTrackMagnetic = compassAngle(bearingTrackTrue + magVar)
+  trackBearingCache = {
+    prevLat: startPoint.lat,
+    prevLon: startPoint.lon,
+    nextLat: destination.lat,
+    nextLon: destination.lon,
+    magVar,
+    rhumbLine,
+    bearingTrackTrue,
+    bearingTrackMagnetic
+  }
+  return { bearingTrackTrue, bearingTrackMagnetic }
+}
+
 // course calculations.
 //
 // `method` selects the branch (`gc` for GreatCircle, `rl` for Rhumbline) to
@@ -101,12 +161,12 @@ export function calcs(src: SKPaths, method: CalcMethod): CourseData {
   const vmgValue = vmg(src)
   const rhumbLine = method === 'Rhumbline'
 
-  const bearingTrackTrue = toRadians(
+  const { bearingTrackTrue, bearingTrackMagnetic } = trackBearings(
+    startPoint,
+    destination,
+    magVar,
     rhumbLine
-      ? startPoint.rhumbBearingTo(destination)
-      : startPoint.initialBearingTo(destination)
   )
-  const bearingTrackMagnetic = compassAngle(bearingTrackTrue + magVar)
   const bearingTrue = toRadians(
     rhumbLine
       ? vesselPosition.rhumbBearingTo(destination)
