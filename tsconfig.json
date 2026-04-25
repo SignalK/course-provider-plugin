@@ -18,7 +18,7 @@
       "ignoreCompilerErrors": true,
       "excludePrivate": true,
       "excludeNotExported": true,
-      "target": "ES5",
+      "target": "ES2020",
       "moduleResolution": "node",
       "preserveConstEnums": true,
       "stripInternal": true,
