@@ -121,6 +121,12 @@ module.exports = (server: CourseComputerApp): Plugin => {
   let courseCalcs: CourseData
   let activeRouteId: string | undefined
 
+  // Monotonic counter bumped whenever activeRoute.waypoints is (re)assigned.
+  // The worker keys its routeRemaining cache on this number so the cache
+  // survives the structured clone that worker.postMessage performs on every
+  // tick — array references would not.
+  let waypointsVersion = 0
+
   let metaSent = false
 
   // ******** REQUIRED PLUGIN DEFINITION *******
@@ -316,6 +322,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
         activeRouteId = ci.activeRoute.href.split('/').slice(-1)[0]
         const waypoints = await getWaypoints(activeRouteId)
         srcPaths['activeRoute'].waypoints = waypoints
+        srcPaths['activeRoute'].waypointsVersion = ++waypointsVersion
       }
     }
     server.debug(`[srcPaths]: ${JSON.stringify(srcPaths)}`)
@@ -336,6 +343,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
       server.debug(`*** matched activeRouteId *** ${activeRouteId}`)
       const waypoints = await getWaypoints(activeRouteId as string)
       srcPaths['activeRoute'].waypoints = waypoints
+      srcPaths['activeRoute'].waypointsVersion = ++waypointsVersion
     }
   }
 
@@ -355,7 +363,8 @@ module.exports = (server: CourseComputerApp): Plugin => {
     if (value.href.includes(activeRouteId)) {
       const waypoints = await getWaypoints(activeRouteId as string)
       srcPaths['activeRoute'] = Object.assign({}, value, {
-        waypoints: waypoints
+        waypoints: waypoints,
+        waypointsVersion: ++waypointsVersion
       })
     }
     server.debug(

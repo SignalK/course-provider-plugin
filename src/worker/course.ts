@@ -8,10 +8,13 @@
  * branch is returned empty so existing callers can still index by `gc`/`rl`
  * without conditional access.
  *
- * The track bearing (previousPoint -> nextPoint) is cached across ticks
- * because it depends only on the route endpoints and magneticVariation, not
- * on vessel position. The cache is invalidated whenever any of those keys
- * change.
+ * Two caches keep the per-tick cost down on the hot path:
+ *   - track bearing (previousPoint -> nextPoint), invalidated on endpoint
+ *     or magneticVariation change;
+ *   - route remaining distance, invalidated on waypoints/pointIndex/reverse
+ *     change (keyed on a primitive version counter from the main thread,
+ *     since structured-cloned array references would not survive the
+ *     postMessage boundary).
  */
 
 import { parentPort } from 'worker_threads'
@@ -125,6 +128,24 @@ function trackBearings(
   }
   return { bearingTrackTrue, bearingTrackMagnetic }
 }
+
+// Route remaining distance cache. The total only changes when waypoints,
+// pointIndex, reverse flag, or geodesy flavour change, but the function is
+// called on every position tick.
+//
+// The cache is keyed on `waypointsVersion`, a primitive bumped by the main
+// thread whenever it (re)assigns activeRoute.waypoints. We can't use the
+// array reference itself because worker.postMessage structured-clones the
+// envelope, so the worker sees a fresh array reference every tick even when
+// the route is unchanged.
+interface RouteRemainingCache {
+  waypointsVersion: number
+  pointIndex: number
+  reverse: boolean
+  rhumbLine: boolean
+  total: number
+}
+let routeRemainingCache: RouteRemainingCache | null = null
 
 // course calculations.
 //
@@ -365,20 +386,22 @@ export function targetSpeed(
 }
 
 // total distance in meters of remaining route segments
-function routeRemaining(src: SKPaths, rhumbLine?: boolean): number {
+export function routeRemaining(src: SKPaths, rhumbLine?: boolean): number {
   if (
     src['activeRoute']?.pointIndex === null ||
     !Array.isArray(src['activeRoute']?.waypoints)
   ) {
     return 0
   }
-  if (src['activeRoute']?.waypoints.length < 2) {
+  const waypoints = src['activeRoute'].waypoints as Array<[number, number]>
+  if (waypoints.length < 2) {
     return 0
   }
 
-  let reverse = src['activeRoute']?.reverse
-  let ptIndex = src['activeRoute']?.pointIndex
-  let lastIndex = src['activeRoute']?.waypoints.length - 1
+  const reverse = !!src['activeRoute'].reverse
+  const ptIndex = src['activeRoute'].pointIndex
+  const lastIndex = waypoints.length - 1
+  const useRhumbLine = !!rhumbLine
 
   // determine segments to sum
   let fromIndex: number
@@ -397,17 +420,44 @@ function routeRemaining(src: SKPaths, rhumbLine?: boolean): number {
     toIndex = lastIndex
   }
 
-  // sum segment lengths
-  let wpts = src['activeRoute'].waypoints
+  // The main thread bumps `waypointsVersion` on every (re)assignment of
+  // activeRoute.waypoints. We need a primitive cache key here because the
+  // worker receives a freshly-cloned waypoints array on every postMessage,
+  // so reference equality would never hold across ticks.
+  const waypointsVersion = src['activeRoute'].waypointsVersion
+  const canCache = typeof waypointsVersion === 'number'
+
+  if (canCache) {
+    const cache = routeRemainingCache
+    if (
+      cache &&
+      cache.waypointsVersion === waypointsVersion &&
+      cache.pointIndex === ptIndex &&
+      cache.reverse === reverse &&
+      cache.rhumbLine === useRhumbLine
+    ) {
+      return cache.total
+    }
+  }
+
+  // Sum segment lengths. Advance a single LatLon cursor instead of allocating
+  // two LatLon objects per iteration; on a 50-waypoint route that saves ~50
+  // allocations per cache miss.
+  let pt = new LatLon(waypoints[fromIndex][1], waypoints[fromIndex][0])
   let rteLen = 0
   for (let idx = fromIndex; idx < toIndex; idx++) {
-    let pt = new LatLon(wpts[idx][1], wpts[idx][0])
-    if (rhumbLine) {
-      rteLen += pt.rhumbDistanceTo(
-        new LatLon(wpts[idx + 1][1], wpts[idx + 1][0])
-      )
-    } else {
-      rteLen += pt.distanceTo(new LatLon(wpts[idx + 1][1], wpts[idx + 1][0]))
+    const next = new LatLon(waypoints[idx + 1][1], waypoints[idx + 1][0])
+    rteLen += useRhumbLine ? pt.rhumbDistanceTo(next) : pt.distanceTo(next)
+    pt = next
+  }
+
+  if (canCache) {
+    routeRemainingCache = {
+      waypointsVersion,
+      pointIndex: ptIndex,
+      reverse,
+      rhumbLine: useRhumbLine,
+      total: rteLen
     }
   }
   return rteLen

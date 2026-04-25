@@ -199,3 +199,191 @@ describe('track bearing cache (task 4)', () => {
     expect(result.gc).toEqual({})
   })
 })
+
+describe('routeRemaining cache and cursor reuse (tasks 5, 6)', () => {
+  // A 4-waypoint route along the equator: 1deg + 1deg + 1deg = 3deg, which
+  // the stub maps to 3 * 1000 = 3000 m.
+  //
+  // `waypointsVersion` is the cache key that survives the structured clone
+  // performed by worker.postMessage. The main thread bumps it whenever
+  // activeRoute.waypoints is reassigned; tests pass it explicitly to model
+  // that behaviour.
+  function routeSrc(waypointsVersion: number = 1): Record<string, any> {
+    return {
+      activeRoute: {
+        waypoints: [
+          [0, 0],
+          [1, 0],
+          [2, 0],
+          [3, 0]
+        ] as Array<[number, number]>,
+        pointIndex: 0,
+        reverse: false,
+        waypointsVersion
+      }
+    }
+  }
+
+  it('returns the great-circle total of remaining segments', async () => {
+    const { routeRemaining } = (await import('../src/worker/course')) as any
+    expect(routeRemaining(routeSrc(), false)).toBe(3000)
+  })
+
+  it('returns the rhumb-line total of remaining segments', async () => {
+    const { routeRemaining } = (await import('../src/worker/course')) as any
+    // Stub adds 0.5 per segment to differentiate from gc; 3 segments -> +1.5.
+    expect(routeRemaining(routeSrc(), true)).toBe(3001.5)
+  })
+
+  it('serves repeated calls from cache without re-summing segments', async () => {
+    const { LatLonSpherical } = (await import(
+      '../src/lib/geodesy/latlon-spherical.js'
+    )) as any
+    const { routeRemaining } = (await import('../src/worker/course')) as any
+
+    const src = routeSrc()
+    const first = routeRemaining(src, false)
+
+    const spy = vi.spyOn(LatLonSpherical.prototype, 'distanceTo')
+    const second = routeRemaining(src, false)
+    expect(second).toBe(first)
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('runs exactly one distance call per segment (no double allocation)', async () => {
+    const { LatLonSpherical } = (await import(
+      '../src/lib/geodesy/latlon-spherical.js'
+    )) as any
+    const { routeRemaining } = (await import('../src/worker/course')) as any
+
+    const distSpy = vi.spyOn(LatLonSpherical.prototype, 'distanceTo')
+    routeRemaining(routeSrc(), false)
+    // 4 waypoints, fromIndex 0, toIndex 3 -> 3 segments -> 3 distance calls.
+    // Cursor reuse keeps this at one call per segment instead of paying for
+    // two LatLon constructions per iteration.
+    expect(distSpy).toHaveBeenCalledTimes(3)
+  })
+
+  it('invalidates when waypointsVersion bumps (route content changed)', async () => {
+    const { LatLonSpherical } = (await import(
+      '../src/lib/geodesy/latlon-spherical.js'
+    )) as any
+    const { routeRemaining } = (await import('../src/worker/course')) as any
+
+    routeRemaining(routeSrc(1), false)
+
+    const replaced = routeSrc(2) // version bumped: route content has changed
+    replaced.activeRoute.waypoints[3] = [4, 0] // total now 4 segments worth
+    const spy = vi.spyOn(LatLonSpherical.prototype, 'distanceTo')
+    const total = routeRemaining(replaced, false)
+
+    expect(spy).toHaveBeenCalled()
+    expect(total).toBe(4000)
+  })
+
+  it('hits cache after structuredClone (across worker postMessage)', async () => {
+    const { LatLonSpherical } = (await import(
+      '../src/lib/geodesy/latlon-spherical.js'
+    )) as any
+    const { routeRemaining } = (await import('../src/worker/course')) as any
+
+    // Models the production flow: main thread builds srcPaths once, posts to
+    // the worker every tick, Node structured-clones the envelope. The cache
+    // must hit on the cloned object as long as waypointsVersion is unchanged.
+    const tick1 = routeSrc(7)
+    const first = routeRemaining(tick1, false)
+
+    const tick2 = structuredClone(tick1)
+    const spy = vi.spyOn(LatLonSpherical.prototype, 'distanceTo')
+    const second = routeRemaining(tick2, false)
+
+    expect(second).toBe(first)
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('invalidates when pointIndex advances', async () => {
+    const { routeRemaining } = (await import('../src/worker/course')) as any
+
+    const src = routeSrc()
+    const fromStart = routeRemaining(src, false)
+
+    src.activeRoute.pointIndex = 2
+    const fromMid = routeRemaining(src, false)
+
+    expect(fromStart).toBe(3000)
+    // Only the last segment remains: 1 * 1000 = 1000 m.
+    expect(fromMid).toBe(1000)
+  })
+
+  it('invalidates when reverse flag changes', async () => {
+    const { LatLonSpherical } = (await import(
+      '../src/lib/geodesy/latlon-spherical.js'
+    )) as any
+    const { routeRemaining } = (await import('../src/worker/course')) as any
+
+    const src = routeSrc()
+    src.activeRoute.pointIndex = 1
+    routeRemaining(src, false)
+
+    // Spy after the cache is warm; flipping `reverse` must force a recompute
+    // even though waypointsVersion / pointIndex / rhumbLine are unchanged.
+    const spy = vi.spyOn(LatLonSpherical.prototype, 'distanceTo')
+    src.activeRoute.reverse = true
+    routeRemaining(src, false)
+
+    expect(spy).toHaveBeenCalled()
+  })
+
+  it('returns 0 in reverse when pointIndex equals lastIndex', async () => {
+    const { routeRemaining } = (await import('../src/worker/course')) as any
+    const src = routeSrc()
+    src.activeRoute.pointIndex = 3 // = lastIndex
+    src.activeRoute.reverse = true
+    // Reverse early-return: fromIndex 0, toIndex = lastIndex - lastIndex = 0.
+    expect(routeRemaining(src, false)).toBe(0)
+  })
+
+  it('invalidates when geodesy flavour changes', async () => {
+    const { LatLonSpherical } = (await import(
+      '../src/lib/geodesy/latlon-spherical.js'
+    )) as any
+    const { routeRemaining } = (await import('../src/worker/course')) as any
+
+    routeRemaining(routeSrc(), false)
+
+    const spy = vi.spyOn(LatLonSpherical.prototype, 'rhumbDistanceTo')
+    const rhumbTotal = routeRemaining(routeSrc(), true)
+    expect(spy).toHaveBeenCalled()
+    expect(rhumbTotal).toBe(3001.5)
+  })
+
+  it('returns 0 when fewer than two waypoints remain', async () => {
+    const { routeRemaining } = (await import('../src/worker/course')) as any
+    const src = {
+      activeRoute: {
+        waypoints: [
+          [0, 0],
+          [1, 0]
+        ],
+        pointIndex: 1,
+        reverse: false
+      }
+    }
+    expect(routeRemaining(src, false)).toBe(0)
+  })
+
+  it('returns 0 when pointIndex is null', async () => {
+    const { routeRemaining } = (await import('../src/worker/course')) as any
+    const src = {
+      activeRoute: {
+        waypoints: [
+          [0, 0],
+          [1, 0]
+        ],
+        pointIndex: null,
+        reverse: false
+      }
+    }
+    expect(routeRemaining(src, false)).toBe(0)
+  })
+})
