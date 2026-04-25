@@ -99,6 +99,10 @@ const SRC_PATHS = [
   'resources.routes.*'
 ]
 
+const PATH_POSITION = 'navigation.position'
+const PATH_ACTIVE_ROUTE = 'navigation.course.activeRoute'
+const PATH_RESOURCES_ROUTE_PREFIX = 'resources.route'
+
 module.exports = (server: CourseComputerApp): Plugin => {
   const watchArrival: Watcher = new Watcher() // watch distance from arrivalCircle
   const watchPassedDest: Watcher = new Watcher() // watch passedPerpendicular
@@ -210,35 +214,34 @@ module.exports = (server: CourseComputerApp): Plugin => {
         server.error(`${plugin.id} Error: ${error}`)
       },
       (delta: DeltaUpdate) => {
-        if (!delta.updates) {
+        const updates = delta.updates
+        if (!updates) {
           return
         }
-        delta.updates.forEach((u: { values: DeltaValue[] }) => {
-          if (!u.values) {
-            return
+        for (let i = 0, uLen = updates.length; i < uLen; i++) {
+          const values = updates[i].values
+          if (!values) {
+            continue
           }
-          u.values.forEach((v: DeltaValue) => {
-            if (v.path === 'navigation.position') {
-              if (server.debug.enabled) {
-                server.debug(
-                  `navigation.position ${JSON.stringify(v.value)} => calc()`
-                )
-              }
-              srcPaths[v.path] = v.value
+
+          for (let j = 0, vLen = values.length; j < vLen; j++) {
+            const v: DeltaValue = values[j]
+            const p = v.path
+            if (p === PATH_POSITION) {
+              server.debug(
+                `navigation.position ${JSON.stringify(v.value)} => calc()`
+              )
+              srcPaths[p] = v.value
               calc()
-            } else if (v.path === 'navigation.course.activeRoute') {
-              // Pass the delta value by reference. handleActiveRoute stores
-              // its own fresh object via Object.assign({}, value, {waypoints})
-              // so srcPaths never points at the upstream delta value, and no
-              // later code path mutates `value` in place.
-              handleActiveRoute(v.value ?? null)
-            } else if (v.path.startsWith('resources.route')) {
+            } else if (p === PATH_ACTIVE_ROUTE) {
+              handleActiveRoute(v.value ? { ...v.value } : null)
+            } else if (p.startsWith(PATH_RESOURCES_ROUTE_PREFIX)) {
               handleRouteUpdate(v)
             } else {
-              srcPaths[v.path] = v.value
+              srcPaths[p] = v.value
             }
-          })
-        })
+          }
+        }
       }
     )
 
