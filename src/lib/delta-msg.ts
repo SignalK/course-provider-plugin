@@ -1,7 +1,7 @@
 import { Path, PathValue } from '@signalk/server-api'
-import { CourseData } from '../types'
+import { CalcMethod, CourseData } from '../types'
 
-export type CalcMethod = 'GreatCircle' | 'Rhumbline'
+export type { CalcMethod }
 
 const BASE = 'navigation.course.calcValues'
 
@@ -32,10 +32,7 @@ const VALUES_LENGTH = 16
  * preserved verbatim from the original implementation to keep the delta
  * stream byte-compatible with existing subscribers.
  */
-export function buildDeltaMsg(
-  course: CourseData,
-  method: CalcMethod
-) {
+export function buildDeltaMsg(course: CourseData, method: CalcMethod) {
   const source = method === 'Rhumbline' ? course.rl : course.gc
   const values: PathValue[] = new Array(VALUES_LENGTH)
 
@@ -54,7 +51,10 @@ export function buildDeltaMsg(
     value: source.previousPoint?.distance ?? null
   }
   values[5] = { path: PATH_DISTANCE as Path, value: source.distance ?? null }
-  values[6] = { path: PATH_BEARING_TRUE as Path, value: source.bearingTrue ?? null }
+  values[6] = {
+    path: PATH_BEARING_TRUE as Path,
+    value: source.bearingTrue ?? null
+  }
   values[7] = {
     path: PATH_BEARING_MAG as Path,
     value: source.bearingMagnetic ?? null

@@ -1,17 +1,41 @@
+/**
+ * Course calculation worker.
+ *
+ * Runs in a Node worker thread. Each tick it receives the latest SignalK
+ * path snapshot plus the configured calculation method (GreatCircle or
+ * Rhumbline) and emits the corresponding `CourseData` slice the main thread
+ * needs to publish. Only the configured branch is computed; the unused
+ * branch is returned empty so existing callers can still index by `gc`/`rl`
+ * without conditional access.
+ */
+
 import { parentPort } from 'worker_threads'
-import { CourseData, SKPaths } from '../types'
+import {
+  CalcMethod,
+  CalcRequest,
+  CourseData,
+  CourseResult,
+  SKPaths
+} from '../types'
 import { LatLonSpherical as LatLon } from '../lib/geodesy/latlon-spherical.js'
+
+// Empty-result template factory. Used both for the no-active-destination
+// transition message and the early-exit path inside calcs(); centralising
+// the shape avoids drift if CourseData ever gets a new required field.
+function emptyCourseData(): CourseData {
+  return { gc: {}, rl: {}, passedPerpendicular: false }
+}
 
 let activeDest = false
 
 // process message from main thread
-parentPort?.on('message', (message: SKPaths) => {
-  if (parseSKPaths(message)) {
-    parentPort?.postMessage(calcs(message))
+parentPort?.on('message', (message: CalcRequest) => {
+  if (parseSKPaths(message.paths)) {
+    parentPort?.postMessage(calcs(message.paths, message.method))
     activeDest = true
   } else {
     if (activeDest) {
-      parentPort?.postMessage({ gc: {}, rl: {} })
+      parentPort?.postMessage(emptyCourseData())
       activeDest = false
     }
   }
@@ -42,8 +66,12 @@ function compassAngle(angle: number): number {
     : angle
 }
 
-// course calculations
-function calcs(src: SKPaths): CourseData {
+// course calculations.
+//
+// `method` selects the branch (`gc` for GreatCircle, `rl` for Rhumbline) to
+// compute. The unused branch is returned empty so existing callers can still
+// index by `gc`/`rl` without conditional access.
+export function calcs(src: SKPaths, method: CalcMethod): CourseData {
   const vesselPosition = src['navigation.position']
     ? new LatLon(
         src['navigation.position'].latitude,
@@ -63,79 +91,62 @@ function calcs(src: SKPaths): CourseData {
       )
     : null
 
-  const res: CourseData = { gc: {}, rl: {}, passedPerpendicular: false }
+  const res = emptyCourseData()
   if (!vesselPosition || !destination || !startPoint) {
     return res
   }
 
-  const xte = vesselPosition?.crossTrackDistanceTo(startPoint, destination)
+  const xte = vesselPosition.crossTrackDistanceTo(startPoint, destination)
   const magVar = src['navigation.magneticVariation'] ?? 0.0
   const vmgValue = vmg(src)
+  const rhumbLine = method === 'Rhumbline'
 
-  // GreatCircle
-  const bearingTrackTrue = toRadians(startPoint?.initialBearingTo(destination))
-  const bearingTrue = toRadians(vesselPosition?.initialBearingTo(destination))
+  const bearingTrackTrue = toRadians(
+    rhumbLine
+      ? startPoint.rhumbBearingTo(destination)
+      : startPoint.initialBearingTo(destination)
+  )
   const bearingTrackMagnetic = compassAngle(bearingTrackTrue + magVar)
+  const bearingTrue = toRadians(
+    rhumbLine
+      ? vesselPosition.rhumbBearingTo(destination)
+      : vesselPosition.initialBearingTo(destination)
+  )
   const bearingMagnetic = compassAngle(bearingTrue + magVar)
-  const gcDistance = vesselPosition?.distanceTo(destination)
-  const gcVmg = vmgValue
-  const gcVmc = vmc(src, bearingTrue, 'true') // for ETA, TTG - prefer 'true' values
-  const gcTime = timeCalcs(src, gcDistance, gcVmc as number, false)
+  const distance = rhumbLine
+    ? vesselPosition.rhumbDistanceTo(destination)
+    : vesselPosition.distanceTo(destination)
+  const vmcValue = vmc(src, bearingTrue, 'true') // for ETA, TTG - prefer 'true' values
+  const time = timeCalcs(src, distance, vmcValue as number, rhumbLine)
+  const previousPointDistance = rhumbLine
+    ? vesselPosition.rhumbDistanceTo(startPoint)
+    : vesselPosition.distanceTo(startPoint)
 
-  res.gc = {
-    calcMethod: 'GreatCircle',
-    bearingTrackTrue: bearingTrackTrue,
-    bearingTrackMagnetic: bearingTrackMagnetic,
+  const methodResult: CourseResult = {
+    calcMethod: rhumbLine ? 'Rhumbline' : 'GreatCircle',
+    bearingTrackTrue,
+    bearingTrackMagnetic,
     crossTrackError: xte,
-    distance: gcDistance,
-    bearingTrue: bearingTrue,
-    bearingMagnetic: bearingMagnetic,
-    velocityMadeGood: gcVmg,
-    velocityMadeGoodToCourse: gcVmc,
-    timeToGo: gcTime.nextPoint.ttg,
-    estimatedTimeOfArrival: gcTime.nextPoint.eta,
-    previousPoint: {
-      distance: vesselPosition?.distanceTo(startPoint)
-    },
+    distance,
+    bearingTrue,
+    bearingMagnetic,
+    velocityMadeGood: vmgValue,
+    velocityMadeGoodToCourse: vmcValue,
+    timeToGo: time.nextPoint.ttg,
+    estimatedTimeOfArrival: time.nextPoint.eta,
+    previousPoint: { distance: previousPointDistance },
     route: {
-      timeToGo: gcTime.route.ttg,
-      estimatedTimeOfArrival: gcTime.route.eta,
-      distance: gcTime.route.dtg
+      timeToGo: time.route.ttg,
+      estimatedTimeOfArrival: time.route.eta,
+      distance: time.route.dtg
     },
-    targetSpeed: targetSpeed(src, gcDistance)
+    targetSpeed: targetSpeed(src, distance, rhumbLine)
   }
 
-  // Rhumbline
-  const rlBearingTrackTrue = toRadians(startPoint?.rhumbBearingTo(destination))
-  const rlBearingTrue = toRadians(vesselPosition?.rhumbBearingTo(destination))
-  const rlBearingTrackMagnetic = compassAngle(rlBearingTrackTrue + magVar)
-  const rlBearingMagnetic = compassAngle(rlBearingTrue + magVar)
-  const rlDistance = vesselPosition?.rhumbDistanceTo(destination)
-  const rlVmg = vmgValue
-  const rlVmc = vmc(src, rlBearingTrue, 'true') // for ETA, TTG - prefer 'true' values
-  const rlTime = timeCalcs(src, rlDistance, rlVmc as number, true)
-
-  res.rl = {
-    calcMethod: 'Rhumbline',
-    bearingTrackTrue: rlBearingTrackTrue,
-    bearingTrackMagnetic: rlBearingTrackMagnetic,
-    crossTrackError: xte,
-    distance: rlDistance,
-    bearingTrue: rlBearingTrue,
-    bearingMagnetic: rlBearingMagnetic,
-    velocityMadeGood: rlVmg,
-    velocityMadeGoodToCourse: rlVmc,
-    timeToGo: rlTime.nextPoint.ttg,
-    estimatedTimeOfArrival: rlTime.nextPoint.eta,
-    previousPoint: {
-      distance: vesselPosition?.rhumbDistanceTo(startPoint)
-    },
-    route: {
-      timeToGo: rlTime.route.ttg,
-      estimatedTimeOfArrival: rlTime.route.eta,
-      distance: rlTime.route.dtg
-    },
-    targetSpeed: targetSpeed(src, rlDistance, true)
+  if (rhumbLine) {
+    res.rl = methodResult
+  } else {
+    res.gc = methodResult
   }
 
   // passed destination perpendicular

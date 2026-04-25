@@ -2,6 +2,17 @@ export interface SKPaths {
   [key: string]: any
 }
 
+export type CalcMethod = 'GreatCircle' | 'Rhumbline'
+
+// Worker invocation envelope. The worker only ever needs the current path
+// snapshot plus the calculation method that buildDeltaMsg will publish, so
+// we send those together to avoid keeping the worker stateful or mixing the
+// method tag into the SignalK path map.
+export interface CalcRequest {
+  paths: SKPaths
+  method: CalcMethod
+}
+
 export interface CourseData {
   gc: CourseResult
   rl: CourseResult

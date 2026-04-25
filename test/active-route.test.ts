@@ -90,7 +90,8 @@ async function startPlugin(getResourceImpl: (id: string) => Promise<any>) {
 }
 
 // Drive a navigation.position through the dispatcher so the worker mock
-// receives the current srcPaths snapshot. Returns that snapshot object.
+// receives the current srcPaths snapshot. Returns the paths object from
+// the latest posted CalcRequest envelope.
 async function snapshotSrcPaths(
   deltaCallback: DeltaCallback,
   worker: MockWorker
@@ -112,7 +113,10 @@ async function snapshotSrcPaths(
   await new Promise((r) => setTimeout(r, 0))
   const after = worker.postedMessages.length
   expect(after).toBeGreaterThan(before)
-  return worker.postedMessages[after - 1] as Record<string, any>
+  const envelope = worker.postedMessages[after - 1] as {
+    paths: Record<string, any>
+  }
+  return envelope.paths
 }
 
 describe('navigation.course.activeRoute dispatch', () => {

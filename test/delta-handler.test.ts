@@ -128,8 +128,15 @@ describe('delta handler dispatch', () => {
     })
 
     expect(worker.postedMessages.length).toBe(1)
-    const msg = worker.postedMessages[0] as Record<string, any>
-    expect(msg['navigation.position']).toEqual({ latitude: 10, longitude: 20 })
+    const msg = worker.postedMessages[0] as {
+      paths: Record<string, any>
+      method: string
+    }
+    expect(msg.method).toBe('GreatCircle')
+    expect(msg.paths['navigation.position']).toEqual({
+      latitude: 10,
+      longitude: 20
+    })
 
     stop()
   })
@@ -202,11 +209,14 @@ describe('delta handler dispatch', () => {
 
     // Exactly one postMessage: the one triggered by navigation.position.
     expect(worker.postedMessages.length).toBe(1)
-    const msg = worker.postedMessages[0] as Record<string, any>
+    const msg = worker.postedMessages[0] as { paths: Record<string, any> }
     // All three values should be present in srcPaths by the time calc() runs.
-    expect(msg['navigation.speedOverGround']).toBe(4.2)
-    expect(msg['navigation.position']).toEqual({ latitude: 1, longitude: 2 })
-    expect(msg['navigation.headingTrue']).toBe(1.57)
+    expect(msg.paths['navigation.speedOverGround']).toBe(4.2)
+    expect(msg.paths['navigation.position']).toEqual({
+      latitude: 1,
+      longitude: 2
+    })
+    expect(msg.paths['navigation.headingTrue']).toBe(1.57)
     stop()
   })
 
@@ -246,9 +256,12 @@ describe('delta handler dispatch', () => {
     })
 
     expect(worker.postedMessages.length).toBe(1)
-    const msg = worker.postedMessages[0] as Record<string, any>
-    expect(msg['navigation.speedOverGround']).toBe(3.1)
-    expect(msg['navigation.position']).toEqual({ latitude: 5, longitude: 6 })
+    const msg = worker.postedMessages[0] as { paths: Record<string, any> }
+    expect(msg.paths['navigation.speedOverGround']).toBe(3.1)
+    expect(msg.paths['navigation.position']).toEqual({
+      latitude: 5,
+      longitude: 6
+    })
     stop()
   })
 })

@@ -1,8 +1,10 @@
 import { Plugin, ServerAPI, SKVersion, CourseInfo } from '@signalk/server-api'
 import { Application, Request, Response } from 'express'
 import { Notification, Watcher, WatchEvent } from './lib/alarms'
-import { buildDeltaMsg, CalcMethod } from './lib/delta-msg'
+import { buildDeltaMsg } from './lib/delta-msg'
 import {
+  CalcMethod,
+  CalcRequest,
   CourseData,
   SKPaths,
   ALARM_METHOD,
@@ -374,7 +376,11 @@ module.exports = (server: CourseComputerApp): Plugin => {
       if (server.debug.enabled) {
         server.debug(JSON.stringify(srcPaths))
       }
-      worker?.postMessage(srcPaths)
+      const request: CalcRequest = {
+        paths: srcPaths,
+        method: config.calculations.method as CalcMethod
+      }
+      worker?.postMessage(request)
     } else {
       server.debug('No vessel position.....Skipping calc()')
     }
@@ -386,16 +392,15 @@ module.exports = (server: CourseComputerApp): Plugin => {
     if (server.debug.enabled) {
       server.debug(JSON.stringify(result))
     }
+    const method = config.calculations.method as CalcMethod
+    const branch = method === 'Rhumbline' ? result.rl : result.gc
     watchArrival.rangeMax = srcPaths['navigation.course.arrivalCircle'] ?? -1
-    watchArrival.value = result.gc?.distance ?? -1
+    watchArrival.value = branch?.distance ?? -1
     watchPassedDest.value = result.passedPerpendicular ? 1 : 0
     courseCalcs = result
     server.handleMessage(
       plugin.id,
-      buildDeltaMsg(
-        courseCalcs as CourseData,
-        config.calculations.method as CalcMethod
-      ),
+      buildDeltaMsg(courseCalcs as CourseData, method),
       SKVersion.v2
     )
     server.debug(`*** course data delta sent***`)
