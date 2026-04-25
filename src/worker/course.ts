@@ -196,6 +196,20 @@ interface CourseTimes {
   }
 }
 
+/**
+ * Resolve the millisecond timestamp from a SignalK datetime-like field.
+ * Accepts:
+ *   - ISO 8601 string (per SignalK spec)
+ *   - number (epoch-ms, legacy tolerance)
+ *   - undefined / null -> current time
+ * Returns NaN on an unparseable string; callers must check Number.isFinite.
+ */
+function resolveDateMsec(raw: unknown): number {
+  if (raw === undefined || raw === null) return Date.now()
+  if (typeof raw === 'number') return raw
+  return Date.parse(raw as string)
+}
+
 // Time to Go & Estimated time of arrival at the nextPoint / route destination
 export function timeCalcs(
   src: SKPaths,
@@ -222,11 +236,7 @@ export function timeCalcs(
     return result
   }
 
-  const date: Date = src['navigation.datetime']
-    ? new Date(src['navigation.datetime'])
-    : new Date()
-
-  const dateMsec = date.getTime()
+  const dateMsec = resolveDateMsec(src['navigation.datetime'])
   if (!Number.isFinite(dateMsec)) {
     return result
   }
@@ -266,17 +276,12 @@ export function targetSpeed(
     distance += routeRemaining(src, rhumbLine)
   }
 
-  const date: Date = src['navigation.datetime']
-    ? new Date(src['navigation.datetime'])
-    : new Date()
-
-  const dateMsec = date.getTime()
+  const dateMsec = resolveDateMsec(src['navigation.datetime'])
   if (!Number.isFinite(dateMsec)) {
     return null
   }
 
-  const tat = new Date(src['navigation.course.targetArrivalTime'])
-  const tatMsec = tat.getTime()
+  const tatMsec = resolveDateMsec(src['navigation.course.targetArrivalTime'])
   if (!Number.isFinite(tatMsec)) {
     return null
   }
