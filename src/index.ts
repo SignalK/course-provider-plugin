@@ -162,6 +162,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
       const msg = 'Started'
       server.setPluginStatus(msg)
+      return undefined
     } catch (error) {
       const msg = 'Started with errors!'
       server.setPluginError(msg)

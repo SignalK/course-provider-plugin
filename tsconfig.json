@@ -1,29 +1,43 @@
 {
-    "compilerOptions": {
-      "target": "ES2022",
-      "module": "commonjs",
-      "outDir": "./plugin",
-      "esModuleInterop": true,
-      "strict": true,
-      "allowJs": true,
-      "allowSyntheticDefaultImports": true
-    },
-    "include": ["./src/**/*"],
-    "exclude": ["node_modules"],
-    "typedocOptions": {
-      "mode": "modules",
-      "out": "tsdocs",
-      "exclude": ["test", "node_modules"],
-      "theme": "default",
-      "ignoreCompilerErrors": true,
-      "excludePrivate": true,
-      "excludeNotExported": true,
-      "target": "ES2022",
-      "moduleResolution": "node",
-      "preserveConstEnums": true,
-      "stripInternal": true,
-      "suppressExcessPropertyErrors": true,
-      "suppressImplicitAnyIndexErrors": true,
-      "module": "commonjs"
-    }
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+
+    "strict": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "isolatedModules": true,
+
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+
+    // The vendored geodesy code under src/lib/geodesy/ is JavaScript;
+    // the rest is TypeScript. allowJs lets the .js files participate in
+    // type-checking via JSDoc + structural inference.
+    "allowJs": true,
+
+    // Tests dynamic-import the source by path with a `.ts` suffix
+    // (`await import('../src/index.ts')`). `allowImportingTsExtensions`
+    // teaches tsc to accept that; tsconfig.build.json drops it because
+    // the production build never sees test code.
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+
+    "types": ["node"],
+
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "stripInternal": true,
+    "outDir": "plugin",
+    "rootDir": "."
+  },
+  "include": ["src/**/*", "test/**/*.ts"],
+  "exclude": ["node_modules", "plugin", "coverage", "reports", ".stryker-tmp"]
 }
