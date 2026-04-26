@@ -22,14 +22,7 @@
     // type-checking via JSDoc + structural inference.
     "allowJs": true,
 
-    // Tests dynamic-import the source by path with a `.ts` suffix
-    // (`await import('../src/index.ts')`). `allowImportingTsExtensions`
-    // teaches tsc to accept that; tsconfig.build.json drops it because
-    // the production build never sees test code.
-    "allowImportingTsExtensions": true,
-    "noEmit": true,
-
-    "types": ["node"],
+    "types": ["node", "mocha"],
 
     "declaration": true,
     "declarationMap": true,

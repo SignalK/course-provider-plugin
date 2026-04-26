@@ -13,7 +13,7 @@ plugin
 src/lib/geodesy
 
 # Manual debug script run against the build output; not part of the
-# vitest suite. Skip rather than reformat for stylistic consistency.
+# mocha suite. Skip rather than reformat for stylistic consistency.
 test/passedPerpendicular.js
 
 # Author-facing changelog. Don't fight the maintainer's preferred style.

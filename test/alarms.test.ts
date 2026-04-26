@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { expect } from 'chai'
 import { Watcher } from '../src/lib/alarms'
 
 describe('Watcher', () => {
@@ -13,7 +13,7 @@ describe('Watcher', () => {
     watcher.value = 5
     watcher.value = 15
 
-    expect(events).toEqual(['enter'])
+    expect(events).to.deep.equal(['enter'])
   })
 
   it('emits exit when value moves out of range', () => {
@@ -27,6 +27,6 @@ describe('Watcher', () => {
     watcher.value = 15
     watcher.value = 25
 
-    expect(events).toEqual(['enter', 'exit'])
+    expect(events).to.deep.equal(['enter', 'exit'])
   })
 })

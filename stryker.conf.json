@@ -2,9 +2,9 @@
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
   "packageManager": "npm",
   "reporters": ["clear-text", "progress", "html"],
-  "testRunner": "vitest",
-  "vitest": {
-    "configFile": "vitest.config.ts"
+  "testRunner": "mocha",
+  "mochaOptions": {
+    "spec": ["test/**/*.test.ts"]
   },
   "coverageAnalysis": "perTest",
   "mutate": ["src/**/*.ts"],

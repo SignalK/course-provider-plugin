@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { expect } from 'chai'
 import { buildDeltaMsg } from '../src/lib/delta-msg'
 import { CourseData } from '../src/types'
 
@@ -37,9 +37,9 @@ describe('buildDeltaMsg', () => {
     const msg = buildDeltaMsg(fullCourseData(), 'GreatCircle')
     const values = msg.updates[0].values
 
-    expect(values).toHaveLength(16)
+    expect(values).to.have.lengthOf(16)
     const paths = values.map((v) => v.path)
-    expect(paths).toEqual([
+    expect(paths).to.deep.equal([
       'navigation.course.calcValues.calcMethod',
       'navigation.course.calcValues.bearingTrackTrue',
       'navigation.course.calcValues.bearingTrackMagnetic',
@@ -66,18 +66,20 @@ describe('buildDeltaMsg', () => {
       msg.updates[0].values.map((v) => [v.path, v.value])
     )
 
-    expect(byPath['navigation.course.calcValues.calcMethod']).toBe(
+    expect(byPath['navigation.course.calcValues.calcMethod']).to.equal(
       'GreatCircle'
     )
-    expect(byPath['navigation.course.calcValues.bearingTrackTrue']).toBe(1.1)
-    expect(byPath['navigation.course.calcValues.distance']).toBe(5000)
-    expect(byPath['navigation.course.calcValues.previousPoint.distance']).toBe(
-      100
+    expect(byPath['navigation.course.calcValues.bearingTrackTrue']).to.equal(
+      1.1
     )
+    expect(byPath['navigation.course.calcValues.distance']).to.equal(5000)
+    expect(
+      byPath['navigation.course.calcValues.previousPoint.distance']
+    ).to.equal(100)
     expect(
       byPath['navigation.course.calcValues.route.estimatedTimeOfArrival']
-    ).toBe('2020-01-01T01:00:00.000Z')
-    expect(byPath['navigation.course.calcValues.targetSpeed']).toBe(4.17)
+    ).to.equal('2020-01-01T01:00:00.000Z')
+    expect(byPath['navigation.course.calcValues.targetSpeed']).to.equal(4.17)
   })
 
   it('selects the Rhumbline branch when method is Rhumbline', () => {
@@ -87,9 +89,13 @@ describe('buildDeltaMsg', () => {
       msg.updates[0].values.map((v) => [v.path, v.value])
     )
 
-    expect(byPath['navigation.course.calcValues.calcMethod']).toBe('Rhumbline')
-    expect(byPath['navigation.course.calcValues.bearingTrackTrue']).toBe(9.9)
-    expect(byPath['navigation.course.calcValues.distance']).toBe(6000)
+    expect(byPath['navigation.course.calcValues.calcMethod']).to.equal(
+      'Rhumbline'
+    )
+    expect(byPath['navigation.course.calcValues.bearingTrackTrue']).to.equal(
+      9.9
+    )
+    expect(byPath['navigation.course.calcValues.distance']).to.equal(6000)
   })
 
   it('publishes velocityMadeGoodToCourse under both VMG paths', () => {
@@ -102,8 +108,10 @@ describe('buildDeltaMsg', () => {
       msg.updates[0].values.map((v) => [v.path, v.value])
     )
 
-    expect(byPath['navigation.course.calcValues.velocityMadeGood']).toBe(4.2)
-    expect(byPath['performance.velocityMadeGoodToWaypoint']).toBe(4.2)
+    expect(byPath['navigation.course.calcValues.velocityMadeGood']).to.equal(
+      4.2
+    )
+    expect(byPath['performance.velocityMadeGoodToWaypoint']).to.equal(4.2)
   })
 
   it('maps undefined fields to null', () => {
@@ -117,16 +125,15 @@ describe('buildDeltaMsg', () => {
       msg.updates[0].values.map((v) => [v.path, v.value])
     )
 
-    expect(byPath['navigation.course.calcValues.calcMethod']).toBe(
+    expect(byPath['navigation.course.calcValues.calcMethod']).to.equal(
       'GreatCircle'
     )
-    expect(byPath['navigation.course.calcValues.bearingTrackTrue']).toBeNull()
-    expect(byPath['navigation.course.calcValues.distance']).toBeNull()
-    expect(
-      byPath['navigation.course.calcValues.previousPoint.distance']
-    ).toBeNull()
-    expect(byPath['navigation.course.calcValues.route.timeToGo']).toBeNull()
-    expect(byPath['navigation.course.calcValues.targetSpeed']).toBeNull()
+    expect(byPath['navigation.course.calcValues.bearingTrackTrue']).to.be.null
+    expect(byPath['navigation.course.calcValues.distance']).to.be.null
+    expect(byPath['navigation.course.calcValues.previousPoint.distance']).to.be
+      .null
+    expect(byPath['navigation.course.calcValues.route.timeToGo']).to.be.null
+    expect(byPath['navigation.course.calcValues.targetSpeed']).to.be.null
   })
 
   it('maps explicit null fields to null', () => {
@@ -146,9 +153,9 @@ describe('buildDeltaMsg', () => {
       msg.updates[0].values.map((v) => [v.path, v.value])
     )
 
-    expect(byPath['navigation.course.calcValues.bearingTrackTrue']).toBeNull()
-    expect(byPath['navigation.course.calcValues.distance']).toBeNull()
-    expect(byPath['navigation.course.calcValues.route.distance']).toBeNull()
+    expect(byPath['navigation.course.calcValues.bearingTrackTrue']).to.be.null
+    expect(byPath['navigation.course.calcValues.distance']).to.be.null
+    expect(byPath['navigation.course.calcValues.route.distance']).to.be.null
   })
 
   it('preserves zero as a non-null value (distinguishes from undefined)', () => {
@@ -162,9 +169,9 @@ describe('buildDeltaMsg', () => {
       msg.updates[0].values.map((v) => [v.path, v.value])
     )
 
-    expect(byPath['navigation.course.calcValues.distance']).toBe(0)
-    expect(byPath['navigation.course.calcValues.crossTrackError']).toBe(0)
-    expect(byPath['navigation.course.calcValues.timeToGo']).toBe(0)
-    expect(byPath['navigation.course.calcValues.targetSpeed']).toBe(0)
+    expect(byPath['navigation.course.calcValues.distance']).to.equal(0)
+    expect(byPath['navigation.course.calcValues.crossTrackError']).to.equal(0)
+    expect(byPath['navigation.course.calcValues.timeToGo']).to.equal(0)
+    expect(byPath['navigation.course.calcValues.targetSpeed']).to.equal(0)
   })
 })
