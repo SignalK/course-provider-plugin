@@ -1,15 +1,22 @@
-import { Plugin, ServerAPI, SKVersion, CourseInfo } from '@signalk/server-api'
-import { Application, Request, Response } from 'express'
-import { Notification, Watcher, WatchEvent } from './lib/alarms'
-import { buildDeltaMsg, CalcMethod } from './lib/delta-msg'
 import {
-  CourseData,
-  SKPaths,
-  ALARM_METHOD,
+  Plugin,
+  ServerAPI,
+  SKVersion,
+  SubscribeMessage,
+  Context,
+  SubscriptionOptions,
+  Delta,
+  hasValues,
+  Route,
+  GeoJsonLinestring,
   ALARM_STATE,
-  DeltaUpdate,
-  DeltaValue
-} from './types'
+  ALARM_METHOD,
+  PathValue
+} from '@signalk/server-api'
+import { Application, Request, Response } from 'express'
+import { NotificationMgr, Watcher, WatchEvent } from './lib/alarms'
+import { buildDeltaMsg, CalcMethod } from './lib/delta-msg'
+import { CourseData, SKPaths } from './types'
 
 import path from 'path'
 import { Worker } from 'worker_threads'
@@ -24,17 +31,6 @@ interface CourseComputerApp extends Application, ServerAPI {
   // `debug` at runtime is the `debug` npm module instance; its `enabled`
   // flag is toggled live by the SignalK Admin UI.
   debug: ((msg: any, ...args: any[]) => void) & { enabled?: boolean }
-  subscriptionmanager: {
-    subscribe: (
-      subscribe: SKDeltaSubscription,
-      unsubscribes: Array<any>,
-      errorCallback: (error: any) => void,
-      deltaCallback: (delta: DeltaUpdate) => void
-    ) => void
-  }
-  resourcesApi: {
-    getResource: (resType: string, id: string) => Promise<any>
-  }
 }
 
 const CONFIG_SCHEMA = {
@@ -199,12 +195,12 @@ module.exports = (server: CourseComputerApp): Plugin => {
     server.debug('Initialising Stream Subscriptions....')
     getPaths(skPaths)
 
-    const subscription: SKDeltaSubscription = {
-      context: 'vessels.self',
+    const subscription: SubscribeMessage = {
+      context: 'vessels.self' as Context,
       subscribe: skPaths.map((p) => ({
         path: p,
         period: 500
-      }))
+      })) as SubscriptionOptions[]
     }
 
     server.subscriptionmanager.subscribe(
@@ -213,19 +209,19 @@ module.exports = (server: CourseComputerApp): Plugin => {
       (error) => {
         server.error(`${plugin.id} Error: ${error}`)
       },
-      (delta: DeltaUpdate) => {
+      (delta: Delta) => {
         const updates = delta.updates
         if (!updates) {
           return
         }
         for (let i = 0, uLen = updates.length; i < uLen; i++) {
-          const values = updates[i].values
-          if (!values) {
+          if (!hasValues(updates[i])) {
             continue
           }
+          const values = (updates[i] as any).values
 
           for (let j = 0, vLen = values.length; j < vLen; j++) {
-            const v: DeltaValue = values[j]
+            const v: any = values[j]
             const p = v.path
             if (p === PATH_POSITION) {
               server.debug(
@@ -320,15 +316,15 @@ module.exports = (server: CourseComputerApp): Plugin => {
   }
 
   // retrieve waypoints for supplied route id
-  const getWaypoints = async (id: string): Promise<Array<[number, number]>> => {
-    const rte = await server.resourcesApi.getResource('routes', id)
+  const getWaypoints = async (id: string): Promise<GeoJsonLinestring> => {
+    const rte = (await server.resourcesApi.getResource('routes', id)) as Route
     const waypoints = rte ? rte.feature.geometry.coordinates : []
     server.debug(`*** activeRoute waypoints *** ${waypoints}`)
     return waypoints
   }
 
   // resources.routes delta handler
-  const handleRouteUpdate = async (msg: DeltaValue) => {
+  const handleRouteUpdate = async (msg: PathValue) => {
     server.debug(`*** handleRouteUpdate *** ${JSON.stringify(msg)}`)
     if (msg.path.endsWith(activeRouteId as string)) {
       server.debug(`*** matched activeRouteId *** ${activeRouteId}`)
@@ -547,7 +543,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
     if (event.type === 'enter') {
       if (srcPaths['navigation.position']) {
         emitNotification(
-          new Notification(
+          new NotificationMgr(
             'navigation.course.arrivalCircleEntered',
             `Entered arrival zone: ${event.value.toFixed(
               0
@@ -560,7 +556,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
     }
     if (event.type === 'exit') {
       emitNotification(
-        new Notification('navigation.course.arrivalCircleEntered', null)
+        new NotificationMgr('navigation.course.arrivalCircleEntered', null)
       )
     }
   }
@@ -574,7 +570,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
     if (event.type === 'enter') {
       if (srcPaths['navigation.position']) {
         emitNotification(
-          new Notification(
+          new NotificationMgr(
             'navigation.course.perpendicularPassed',
             watchPassedDest.value === 1
               ? 'Next Point perpendicular has been passed.'
@@ -587,13 +583,13 @@ module.exports = (server: CourseComputerApp): Plugin => {
     }
     if (event.type === 'exit') {
       emitNotification(
-        new Notification('navigation.course.perpendicularPassed', null)
+        new NotificationMgr('navigation.course.perpendicularPassed', null)
       )
     }
   }
 
   // send notification delta message
-  const emitNotification = (notification: Notification) => {
+  const emitNotification = (notification: NotificationMgr) => {
     server.debug(JSON.stringify(notification?.message))
     server.handleMessage(plugin.id, {
       updates: [{ values: [notification.message] }]

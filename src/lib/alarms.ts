@@ -1,9 +1,9 @@
 import { Subject, Observable } from 'rxjs'
 
-import { ALARM_METHOD, ALARM_STATE, DeltaNotification } from '../types'
+import { ALARM_METHOD, ALARM_STATE, Path, PathValue } from '@signalk/server-api'
 
-export class Notification {
-  private _message: DeltaNotification
+export class NotificationMgr {
+  private _message: PathValue
 
   constructor(
     path: string,
@@ -12,7 +12,7 @@ export class Notification {
     method: ALARM_METHOD[] = [ALARM_METHOD.sound, ALARM_METHOD.visual]
   ) {
     this._message = {
-      path: `notifications.${path}`,
+      path: `notifications.${path}` as Path,
       value:
         typeof msg === 'string'
           ? {
@@ -24,7 +24,7 @@ export class Notification {
     }
   }
 
-  get message(): DeltaNotification {
+  get message(): PathValue {
     return this._message
   }
 }
