@@ -297,7 +297,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
   // retrieve initial values of target paths
   const getPaths = async (paths: string[]) => {
     paths.forEach((path) => {
-      const v = server.getSelfPath(path)
+      const v = server.getSelfPath(path) as any
       srcPaths[path] = v?.value ?? null
     })
     const ci = await server.getCourse()

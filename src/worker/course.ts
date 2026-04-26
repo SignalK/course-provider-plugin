@@ -38,8 +38,8 @@ function compassAngle(angle: number): number {
   return angle < 0
     ? angle + maxAngle
     : angle >= maxAngle
-    ? angle - maxAngle
-    : angle
+      ? angle - maxAngle
+      : angle
 }
 
 // course calculations
