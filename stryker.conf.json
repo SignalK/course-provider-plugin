@@ -8,6 +8,7 @@
   },
   "coverageAnalysis": "perTest",
   "mutate": ["src/**/*.ts"],
+  "buildCommand": "npm run build",
   "thresholds": {
     "high": 90,
     "low": 80,

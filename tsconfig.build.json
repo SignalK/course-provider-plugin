@@ -1,11 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "rootDir": "src",
-    // Build emits to plugin/. Override the typecheck-time settings that
-    // were friendly to test files but break or have no meaning here.
-    "noEmit": false,
-    "allowImportingTsExtensions": false
+    "rootDir": "src"
   },
   "include": ["src/**/*"],
   "exclude": [
