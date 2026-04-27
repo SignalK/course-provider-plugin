@@ -42,8 +42,65 @@ function compassAngle(angle: number): number {
       : angle
 }
 
+// Track bearing cache. The bearing from previousPoint to nextPoint depends
+// only on the route endpoints and magneticVariation, never on vessel
+// position, so it can be reused across ticks until any of those change.
+// Both great-circle and rhumb-line flavours are computed and stored together
+// because they share the same key inputs.
+//
+// trackBearings returns the cache record directly to avoid allocating a
+// fresh result object on every tick. Callers must treat the returned value
+// as read-only (the Readonly<> type enforces this at compile time).
+interface TrackBearingCache {
+  prevLat: number
+  prevLon: number
+  nextLat: number
+  nextLon: number
+  magVar: number
+  gcTrue: number
+  gcMagnetic: number
+  rlTrue: number
+  rlMagnetic: number
+}
+let trackBearingCache: TrackBearingCache | null = null
+
+function trackBearings(
+  startPoint: LatLon,
+  destination: LatLon,
+  magVar: number
+): Readonly<TrackBearingCache> {
+  const c = trackBearingCache
+  if (
+    c &&
+    c.magVar === magVar &&
+    c.prevLat === startPoint.lat &&
+    c.prevLon === startPoint.lon &&
+    c.nextLat === destination.lat &&
+    c.nextLon === destination.lon
+  ) {
+    return c
+  }
+  const gcTrue = toRadians(startPoint.initialBearingTo(destination))
+  const gcMagnetic = compassAngle(gcTrue + magVar)
+  const rlTrue = toRadians(startPoint.rhumbBearingTo(destination))
+  const rlMagnetic = compassAngle(rlTrue + magVar)
+  const fresh: TrackBearingCache = {
+    prevLat: startPoint.lat,
+    prevLon: startPoint.lon,
+    nextLat: destination.lat,
+    nextLon: destination.lon,
+    magVar,
+    gcTrue,
+    gcMagnetic,
+    rlTrue,
+    rlMagnetic
+  }
+  trackBearingCache = fresh
+  return fresh
+}
+
 // course calculations
-function calcs(src: SKPaths): CourseData {
+export function calcs(src: SKPaths): CourseData {
   const vesselPosition = src['navigation.position']
     ? new LatLon(
         src['navigation.position'].latitude,
@@ -71,11 +128,12 @@ function calcs(src: SKPaths): CourseData {
   const xte = vesselPosition?.crossTrackDistanceTo(startPoint, destination)
   const magVar = src['navigation.magneticVariation'] ?? 0.0
   const vmgValue = vmg(src)
+  const tb = trackBearings(startPoint, destination, magVar)
 
   // GreatCircle
-  const bearingTrackTrue = toRadians(startPoint?.initialBearingTo(destination))
+  const bearingTrackTrue = tb.gcTrue
   const bearingTrue = toRadians(vesselPosition?.initialBearingTo(destination))
-  const bearingTrackMagnetic = compassAngle(bearingTrackTrue + magVar)
+  const bearingTrackMagnetic = tb.gcMagnetic
   const bearingMagnetic = compassAngle(bearingTrue + magVar)
   const gcDistance = vesselPosition?.distanceTo(destination)
   const gcVmg = vmgValue
@@ -106,9 +164,9 @@ function calcs(src: SKPaths): CourseData {
   }
 
   // Rhumbline
-  const rlBearingTrackTrue = toRadians(startPoint?.rhumbBearingTo(destination))
+  const rlBearingTrackTrue = tb.rlTrue
   const rlBearingTrue = toRadians(vesselPosition?.rhumbBearingTo(destination))
-  const rlBearingTrackMagnetic = compassAngle(rlBearingTrackTrue + magVar)
+  const rlBearingTrackMagnetic = tb.rlMagnetic
   const rlBearingMagnetic = compassAngle(rlBearingTrue + magVar)
   const rlDistance = vesselPosition?.rhumbDistanceTo(destination)
   const rlVmg = vmgValue
