@@ -1,6 +1,6 @@
 import { expect } from 'chai'
 import { LatLonSpherical } from '../src/lib/geodesy/latlon-spherical'
-import { passedPerpendicular } from '../plugin/worker/course'
+import { passedPerpendicular } from '../src/worker/course'
 
 describe('Passed Perpendicular', () => {
   it('(+ive diff) should return FALSE', () => {
