@@ -22,11 +22,6 @@ import path from 'path'
 import { Worker } from 'worker_threads'
 import { Subscription } from 'rxjs'
 
-interface SKDeltaSubscription {
-  context: string
-  subscribe: Array<{ path: string; period: number }>
-}
-
 interface CourseComputerApp extends Application, ServerAPI {
   // `debug` at runtime is the `debug` npm module instance; its `enabled`
   // flag is toggled live by the SignalK Admin UI.
@@ -162,6 +157,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
       const msg = 'Started'
       server.setPluginStatus(msg)
+      return undefined
     } catch (error) {
       const msg = 'Started with errors!'
       server.setPluginError(msg)
@@ -215,10 +211,11 @@ module.exports = (server: CourseComputerApp): Plugin => {
           return
         }
         for (let i = 0, uLen = updates.length; i < uLen; i++) {
-          if (!hasValues(updates[i])) {
+          const u = updates[i]
+          if (!u || !hasValues(u)) {
             continue
           }
-          const values = (updates[i] as any).values
+          const values = (u as any).values
 
           for (let j = 0, vLen = values.length; j < vLen; j++) {
             const v: any = values[j]
@@ -272,7 +269,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
   // initialise api endpoints
   const initEndpoints = () => {
     server.debug('Initialising API endpoint(s)....')
-    server.get(`${COURSE_CALCS_PATH}`, async (req: Request, res: Response) => {
+    server.get(`${COURSE_CALCS_PATH}`, async (_req: Request, res: Response) => {
       server.debug(`** GET ${COURSE_CALCS_PATH}`)
       const calcs =
         config.calculations.method === 'Rhumbline'
@@ -307,7 +304,10 @@ module.exports = (server: CourseComputerApp): Plugin => {
       srcPaths['navigation.course.previousPoint'] = ci.previousPoint
       srcPaths['activeRoute'] = ci.activeRoute
       if (ci.activeRoute) {
-        activeRouteId = ci.activeRoute.href.split('/').slice(-1)[0]
+        // split('/').slice(-1)[0] is structurally always defined on a
+        // non-empty string, but `noUncheckedIndexedAccess` types it as
+        // `string | undefined`. Empty fallback is unreachable in practice.
+        activeRouteId = ci.activeRoute.href.split('/').slice(-1)[0] ?? ''
         const waypoints = await getWaypoints(activeRouteId)
         srcPaths['activeRoute'].waypoints = waypoints
       }

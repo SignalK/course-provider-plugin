@@ -1,4 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { expect } from 'chai'
+import { resetModuleCache, spy } from './helpers'
 
 // Mock the worker so the plugin can start; we don't care about calc results here.
 const workerInstances: MockWorker[] = []
@@ -28,37 +29,35 @@ class MockWorker {
   unref() {}
 }
 
-vi.mock('worker_threads', () => ({ Worker: MockWorker }))
-vi.mock('express', () => ({}))
-
 type DeltaCallback = (delta: unknown) => void
 
-// Start the plugin, capture the delta callback, and expose a way to read
-// `srcPaths['activeRoute']` via the `message` handler we attach on the
-// worker mock (calc() pushes the full srcPaths snapshot into the worker
-// and that is the only test-visible read-out of the internal state).
-async function startPlugin(getResourceImpl: (id: string) => Promise<any>) {
-  const pluginModule = (await import('../src/index.ts')) as {
-    default?: unknown
-    [key: string]: unknown
+function startPlugin(getResourceImpl: (id: string) => Promise<any>) {
+  // Replace Worker on the singleton worker_threads module so the plugin's
+  // `new Worker(...)` call constructs MockWorker instead. Re-applied per
+  // start because sibling test files may have installed their own
+  // MockWorker subclass into the same singleton.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('worker_threads').Worker = MockWorker
+  resetModuleCache('../src/index')
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const factory = require('../src/index') as (server: any) => {
+    start: (options: any) => void
+    stop: () => void
   }
-  const factory = ((pluginModule as any).default ?? (pluginModule as any)) as (
-    server: any
-  ) => { start: (options: any) => void; stop: () => void }
 
   let deltaCallback: DeltaCallback | null = null
 
   const server = {
-    debug: vi.fn(),
-    error: vi.fn(),
-    setPluginStatus: vi.fn(),
-    setPluginError: vi.fn(),
-    handleMessage: vi.fn(),
-    getSelfPath: vi.fn(() => null),
-    getCourse: vi.fn(() => Promise.resolve(null)),
-    get: vi.fn(),
+    debug: spy(),
+    error: spy(),
+    setPluginStatus: spy(),
+    setPluginError: spy(),
+    handleMessage: spy(),
+    getSelfPath: spy(() => null),
+    getCourse: spy(() => Promise.resolve(null)),
+    get: spy(),
     subscriptionmanager: {
-      subscribe: vi.fn(
+      subscribe: spy(
         (
           _sub: unknown,
           unsubscribes: Array<() => void>,
@@ -70,7 +69,7 @@ async function startPlugin(getResourceImpl: (id: string) => Promise<any>) {
         }
       )
     },
-    resourcesApi: { getResource: vi.fn(getResourceImpl) }
+    resourcesApi: { getResource: spy(getResourceImpl) }
   }
 
   const plugin = factory(server)
@@ -84,7 +83,7 @@ async function startPlugin(getResourceImpl: (id: string) => Promise<any>) {
   return {
     stop: () => plugin.stop(),
     deltaCallback: deltaCallback as DeltaCallback,
-    worker: workerInstances[workerInstances.length - 1],
+    worker: workerInstances[workerInstances.length - 1]!,
     server
   }
 }
@@ -111,7 +110,7 @@ async function snapshotSrcPaths(
   // Give any pending microtasks (from handleActiveRoute awaits) a chance to settle.
   await new Promise((r) => setTimeout(r, 0))
   const after = worker.postedMessages.length
-  expect(after).toBeGreaterThan(before)
+  expect(after).to.be.greaterThan(before)
   return worker.postedMessages[after - 1] as Record<string, any>
 }
 
@@ -129,9 +128,9 @@ describe('navigation.course.activeRoute dispatch', () => {
       [11, 21],
       [12, 22]
     ]
-    const { deltaCallback, worker, server, stop } = await startPlugin(
-      async () => ({ feature: { geometry: { coordinates: waypoints } } })
-    )
+    const { deltaCallback, worker, server, stop } = startPlugin(async () => ({
+      feature: { geometry: { coordinates: waypoints } }
+    }))
 
     const routeValue = {
       href: '/resources/routes/abc123',
@@ -153,22 +152,20 @@ describe('navigation.course.activeRoute dispatch', () => {
     // containing the stored activeRoute.
     const snapshot = await snapshotSrcPaths(deltaCallback, worker)
 
-    expect(server.resourcesApi.getResource).toHaveBeenCalledWith(
-      'routes',
-      'abc123'
-    )
-    expect(snapshot.activeRoute).toBeTruthy()
-    expect(snapshot.activeRoute.href).toBe('/resources/routes/abc123')
-    expect(snapshot.activeRoute.waypoints).toEqual(waypoints)
+    expect(server.resourcesApi.getResource.calledWith('routes', 'abc123')).to.be
+      .true
+    expect(snapshot.activeRoute).to.exist
+    expect(snapshot.activeRoute.href).to.equal('/resources/routes/abc123')
+    expect(snapshot.activeRoute.waypoints).to.deep.equal(waypoints)
     // Important: stored object is a fresh copy, not the original delta value,
     // so the plugin owns its own state and cannot bleed back into upstream.
-    expect(snapshot.activeRoute).not.toBe(routeValue)
+    expect(snapshot.activeRoute).to.not.equal(routeValue)
 
     stop()
   })
 
   it('clears activeRoute when delta value is null', async () => {
-    const { deltaCallback, worker, stop } = await startPlugin(async () => null)
+    const { deltaCallback, worker, stop } = startPlugin(async () => null)
 
     deltaCallback({
       updates: [
@@ -180,7 +177,7 @@ describe('navigation.course.activeRoute dispatch', () => {
     await new Promise((r) => setTimeout(r, 0))
 
     const snapshot = await snapshotSrcPaths(deltaCallback, worker)
-    expect(snapshot.activeRoute).toBeNull()
+    expect(snapshot.activeRoute).to.be.null
     stop()
   })
 })

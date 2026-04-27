@@ -1,3 +1,10 @@
-package-lock.json
 /plugin
 /node_modules
+
+# Coverage + mutation testing scratch
+/coverage
+/reports
+/.stryker-tmp
+
+# Claude Code worktrees
+/.claude

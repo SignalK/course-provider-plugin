@@ -1,0 +1,24 @@
+node_modules
+coverage
+.nyc_output
+.claude
+package-lock.json
+
+# Build output
+dist
+plugin
+
+# Vendored geodesy code (Chris Veness's spherical-trig library); leave
+# its formatting alone so future upstream syncs stay clean.
+src/lib/geodesy
+
+# Manual debug script run against the build output; not part of the
+# mocha suite. Skip rather than reformat for stylistic consistency.
+test/passedPerpendicular.js
+
+# Author-facing changelog. Don't fight the maintainer's preferred style.
+CHANGELOG.md
+
+# Mutation testing
+reports
+.stryker-tmp

@@ -1,4 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { expect } from 'chai'
+import { resetModuleCache, spy } from './helpers'
 
 // Minimal Worker mock so the plugin can start without spawning a real thread.
 // We also capture postMessage calls to assert that a position delta triggers calc().
@@ -34,26 +35,23 @@ class MockWorker {
   unref() {}
 }
 
-vi.mock('worker_threads', () => ({
-  Worker: MockWorker
-}))
-
-vi.mock('express', () => ({}))
-
 type DeltaCallback = (delta: unknown) => void
 
-async function startPluginCapturingDelta(): Promise<{
+function startPluginCapturingDelta(): {
   stop: () => void
   deltaCallback: DeltaCallback
   worker: MockWorker
   server: any
-}> {
-  const pluginModule = (await import('../src/index.ts')) as {
-    default?: unknown
-    [key: string]: unknown
-  }
-  const pluginFactory = (pluginModule as any).default ?? (pluginModule as any)
-  const factory = pluginFactory as (server: any) => {
+} {
+  // Replace Worker on the singleton worker_threads module so the plugin's
+  // `new Worker(...)` call constructs MockWorker instead. Re-applied per
+  // start because sibling test files may have installed their own
+  // MockWorker subclass into the same singleton.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('worker_threads').Worker = MockWorker
+  resetModuleCache('../src/index')
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const factory = require('../src/index') as (server: any) => {
     start: (options: any) => void
     stop: () => void
   }
@@ -61,16 +59,16 @@ async function startPluginCapturingDelta(): Promise<{
   let capturedDeltaCallback: DeltaCallback | null = null
 
   const server = {
-    debug: vi.fn(),
-    error: vi.fn(),
-    setPluginStatus: vi.fn(),
-    setPluginError: vi.fn(),
-    handleMessage: vi.fn(),
-    getSelfPath: vi.fn(() => null),
-    getCourse: vi.fn(() => Promise.resolve(null)),
-    get: vi.fn(),
+    debug: spy(),
+    error: spy(),
+    setPluginStatus: spy(),
+    setPluginError: spy(),
+    handleMessage: spy(),
+    getSelfPath: spy(() => null),
+    getCourse: spy(() => Promise.resolve(null)),
+    get: spy(),
     subscriptionmanager: {
-      subscribe: vi.fn(
+      subscribe: spy(
         (
           _sub: unknown,
           unsubscribes: Array<() => void>,
@@ -83,7 +81,7 @@ async function startPluginCapturingDelta(): Promise<{
       )
     },
     resourcesApi: {
-      getResource: vi.fn(() => Promise.resolve(null))
+      getResource: spy(() => Promise.resolve(null))
     }
   }
 
@@ -99,8 +97,8 @@ async function startPluginCapturingDelta(): Promise<{
 
   return {
     stop: () => plugin.stop(),
-    deltaCallback: capturedDeltaCallback,
-    worker: workerInstances[workerInstances.length - 1],
+    deltaCallback: capturedDeltaCallback as DeltaCallback,
+    worker: workerInstances[workerInstances.length - 1]!,
     server
   }
 }
@@ -111,8 +109,8 @@ describe('delta handler dispatch', () => {
   })
 
   // Positive path: a navigation.position delta should trigger the worker calc.
-  it('forwards navigation.position value and triggers worker calc', async () => {
-    const { deltaCallback, worker, stop } = await startPluginCapturingDelta()
+  it('forwards navigation.position value and triggers worker calc', () => {
+    const { deltaCallback, worker, stop } = startPluginCapturingDelta()
 
     deltaCallback({
       updates: [
@@ -127,16 +125,19 @@ describe('delta handler dispatch', () => {
       ]
     })
 
-    expect(worker.postedMessages.length).toBe(1)
+    expect(worker.postedMessages.length).to.equal(1)
     const msg = worker.postedMessages[0] as Record<string, any>
-    expect(msg['navigation.position']).toEqual({ latitude: 10, longitude: 20 })
+    expect(msg['navigation.position']).to.deep.equal({
+      latitude: 10,
+      longitude: 20
+    })
 
     stop()
   })
 
   // Non-position paths should be stored but not trigger a calc.
-  it('stores non-position paths without triggering calc', async () => {
-    const { deltaCallback, worker, stop } = await startPluginCapturingDelta()
+  it('stores non-position paths without triggering calc', () => {
+    const { deltaCallback, worker, stop } = startPluginCapturingDelta()
 
     deltaCallback({
       updates: [
@@ -149,14 +150,14 @@ describe('delta handler dispatch', () => {
       ]
     })
 
-    expect(worker.postedMessages.length).toBe(0)
+    expect(worker.postedMessages.length).to.equal(0)
     stop()
   })
 
   // resources.routes.<id> paths must dispatch to the route update handler,
   // not fall through to srcPaths.
   it('dispatches resources.routes.* paths to handleRouteUpdate', async () => {
-    const { deltaCallback, server, stop } = await startPluginCapturingDelta()
+    const { deltaCallback, server, stop } = startPluginCapturingDelta()
 
     deltaCallback({
       updates: [
@@ -177,13 +178,13 @@ describe('delta handler dispatch', () => {
     // matches. Here activeRouteId is unset, so nothing is fetched, but the
     // important thing is the dispatch did not store under srcPaths and did
     // not crash.
-    expect(server.resourcesApi.getResource).not.toHaveBeenCalled()
+    expect(server.resourcesApi.getResource.called).to.equal(false)
     stop()
   })
 
   // Mixed batch: one update, multiple values of different kinds.
-  it('handles a batch with multiple value kinds in one update', async () => {
-    const { deltaCallback, worker, stop } = await startPluginCapturingDelta()
+  it('handles a batch with multiple value kinds in one update', () => {
+    const { deltaCallback, worker, stop } = startPluginCapturingDelta()
 
     deltaCallback({
       updates: [
@@ -201,33 +202,36 @@ describe('delta handler dispatch', () => {
     })
 
     // Exactly one postMessage: the one triggered by navigation.position.
-    expect(worker.postedMessages.length).toBe(1)
+    expect(worker.postedMessages.length).to.equal(1)
     const msg = worker.postedMessages[0] as Record<string, any>
     // All three values should be present in srcPaths by the time calc() runs.
-    expect(msg['navigation.speedOverGround']).toBe(4.2)
-    expect(msg['navigation.position']).toEqual({ latitude: 1, longitude: 2 })
-    expect(msg['navigation.headingTrue']).toBe(1.57)
+    expect(msg['navigation.speedOverGround']).to.equal(4.2)
+    expect(msg['navigation.position']).to.deep.equal({
+      latitude: 1,
+      longitude: 2
+    })
+    expect(msg['navigation.headingTrue']).to.equal(1.57)
     stop()
   })
 
   // Defensive: deltas with no updates or no values should not crash.
-  it('tolerates delta with no updates', async () => {
-    const { deltaCallback, worker, stop } = await startPluginCapturingDelta()
+  it('tolerates delta with no updates', () => {
+    const { deltaCallback, worker, stop } = startPluginCapturingDelta()
     deltaCallback({})
-    expect(worker.postedMessages.length).toBe(0)
+    expect(worker.postedMessages.length).to.equal(0)
     stop()
   })
 
-  it('tolerates update with no values', async () => {
-    const { deltaCallback, worker, stop } = await startPluginCapturingDelta()
+  it('tolerates update with no values', () => {
+    const { deltaCallback, worker, stop } = startPluginCapturingDelta()
     deltaCallback({ updates: [{}] })
-    expect(worker.postedMessages.length).toBe(0)
+    expect(worker.postedMessages.length).to.equal(0)
     stop()
   })
 
   // Boundary: multiple updates in a single delta.
-  it('processes multiple updates in a single delta', async () => {
-    const { deltaCallback, worker, stop } = await startPluginCapturingDelta()
+  it('processes multiple updates in a single delta', () => {
+    const { deltaCallback, worker, stop } = startPluginCapturingDelta()
 
     deltaCallback({
       updates: [
@@ -245,10 +249,13 @@ describe('delta handler dispatch', () => {
       ]
     })
 
-    expect(worker.postedMessages.length).toBe(1)
+    expect(worker.postedMessages.length).to.equal(1)
     const msg = worker.postedMessages[0] as Record<string, any>
-    expect(msg['navigation.speedOverGround']).toBe(3.1)
-    expect(msg['navigation.position']).toEqual({ latitude: 5, longitude: 6 })
+    expect(msg['navigation.speedOverGround']).to.equal(3.1)
+    expect(msg['navigation.position']).to.deep.equal({
+      latitude: 5,
+      longitude: 6
+    })
     stop()
   })
 })

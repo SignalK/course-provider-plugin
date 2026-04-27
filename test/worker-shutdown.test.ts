@@ -1,4 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { expect } from 'chai'
+import { resetModuleCache, spy } from './helpers'
 
 const instances: MockWorker[] = []
 
@@ -36,44 +37,39 @@ class MockWorker {
   }
 }
 
-vi.mock('worker_threads', () => ({
-  Worker: MockWorker
-}))
-
-vi.mock('express', () => ({}))
-
 describe('worker shutdown', () => {
   beforeEach(() => {
     instances.length = 0
   })
 
-  it('terminates the worker on plugin stop', async () => {
-    const pluginModule = (await import('../src/index.ts')) as {
-      default?: unknown
-      [key: string]: unknown
-    }
-    const pluginFactory = (pluginModule as any).default ?? (pluginModule as any)
-    const factory = pluginFactory as (server: any) => {
+  it('terminates the worker on plugin stop', () => {
+    // Re-applied here (not at top level) because sibling test files
+    // mutate the same Worker slot.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('worker_threads').Worker = MockWorker
+    resetModuleCache('../src/index')
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const factory = require('../src/index') as (server: any) => {
       start: (options: any) => void
       stop: () => void
     }
 
     const server = {
-      debug: vi.fn(),
-      error: vi.fn(),
-      setPluginStatus: vi.fn(),
-      setPluginError: vi.fn(),
-      handleMessage: vi.fn(),
-      getSelfPath: vi.fn(() => null),
-      getCourse: vi.fn(() => Promise.resolve(null)),
-      get: vi.fn(),
+      debug: spy(),
+      error: spy(),
+      setPluginStatus: spy(),
+      setPluginError: spy(),
+      handleMessage: spy(),
+      getSelfPath: spy(() => null),
+      getCourse: spy(() => Promise.resolve(null)),
+      get: spy(),
       subscriptionmanager: {
-        subscribe: vi.fn((_: unknown, unsubscribes: Array<() => void>) => {
+        subscribe: spy((_: unknown, unsubscribes: Array<() => void>) => {
           unsubscribes.push(() => {})
         })
       },
       resourcesApi: {
-        getResource: vi.fn(() => Promise.resolve(null))
+        getResource: spy(() => Promise.resolve(null))
       }
     }
 
@@ -85,8 +81,8 @@ describe('worker shutdown', () => {
 
     plugin.stop()
 
-    expect(instances.length).toBe(1)
-    expect(instances[0].removeAllListenersCalled).toBe(true)
-    expect(instances[0].terminateCalled).toBe(true)
+    expect(instances.length).to.equal(1)
+    expect(instances[0]!.removeAllListenersCalled).to.equal(true)
+    expect(instances[0]!.terminateCalled).to.equal(true)
   })
 })
