@@ -1,5 +1,5 @@
 import { expect } from 'chai'
-import { mockModule, resetModuleCache } from './helpers'
+import { resetModuleCache } from './helpers'
 
 // Stub the vendored geodesy class so the worker module loads without
 // pulling in heavy trigonometry. The defensive paths exercised below
