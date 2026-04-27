@@ -4,9 +4,9 @@ import { mockModule, resetModuleCache } from './helpers'
 // Stub the vendored geodesy class so the worker module loads without
 // pulling in heavy trigonometry. The defensive paths exercised below
 // never actually invoke LatLonSpherical methods.
-mockModule('../src/lib/geodesy/latlon-spherical.js', {
+/*mockModule('../src/lib/geodesy/latlon-spherical.js', {
   LatLonSpherical: class {}
-})
+})*/
 
 // Force-reload the worker module so it picks up the mocked geodesy
 // dependency (the require cache may already hold a real-loaded copy
