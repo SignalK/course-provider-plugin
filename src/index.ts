@@ -350,17 +350,19 @@ module.exports = (server: CourseComputerApp): Plugin => {
       activeRouteId = undefined
       return
     }
-    if (!activeRouteId) {
-      activeRouteId = value.href.split('/').slice(-1)[0]
-    }
 
-    if (value.href.includes(activeRouteId)) {
-      const waypoints = await getWaypoints(activeRouteId as string)
-      srcPaths['activeRoute'] = Object.assign({}, value, {
-        waypoints: waypoints,
-        waypointsVersion: ++waypointsVersion
-      })
-    }
+    // Always derive activeRouteId from the incoming value so a switch from
+    // one route to another takes effect. The previous code only assigned
+    // activeRouteId when it was unset and then guarded the waypoint fetch
+    // on `value.href.includes(activeRouteId)`, which silently rejected the
+    // new value and left srcPaths pointing at the old route.
+    const newId = value.href.split('/').slice(-1)[0] ?? ''
+    activeRouteId = newId
+    const waypoints = await getWaypoints(newId)
+    srcPaths['activeRoute'] = Object.assign({}, value, {
+      waypoints: waypoints,
+      waypointsVersion: ++waypointsVersion
+    })
     server.debug(
       `*** activeRoute *** ${JSON.stringify(srcPaths['activeRoute'])}`
     )
