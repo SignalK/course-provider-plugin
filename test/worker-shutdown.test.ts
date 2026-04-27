@@ -82,7 +82,7 @@ describe('worker shutdown', () => {
     plugin.stop()
 
     expect(instances.length).to.equal(1)
-    expect(instances[0].removeAllListenersCalled).to.equal(true)
-    expect(instances[0].terminateCalled).to.equal(true)
+    expect(instances[0]!.removeAllListenersCalled).to.equal(true)
+    expect(instances[0]!.terminateCalled).to.equal(true)
   })
 })

@@ -98,7 +98,7 @@ function startPluginCapturingDelta(): {
   return {
     stop: () => plugin.stop(),
     deltaCallback: capturedDeltaCallback as DeltaCallback,
-    worker: workerInstances[workerInstances.length - 1],
+    worker: workerInstances[workerInstances.length - 1]!,
     server
   }
 }

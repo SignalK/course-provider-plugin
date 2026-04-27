@@ -83,7 +83,7 @@ function startPlugin(getResourceImpl: (id: string) => Promise<any>) {
   return {
     stop: () => plugin.stop(),
     deltaCallback: deltaCallback as DeltaCallback,
-    worker: workerInstances[workerInstances.length - 1],
+    worker: workerInstances[workerInstances.length - 1]!,
     server
   }
 }

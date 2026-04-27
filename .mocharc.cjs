@@ -1,5 +1,5 @@
 module.exports = {
   extensions: ['ts'],
-  spec: 'test/**/*.test.ts',
+  spec: 'test/**/*.ts',
   'node-option': ['import=tsx']
 }

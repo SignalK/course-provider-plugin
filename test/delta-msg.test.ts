@@ -35,7 +35,7 @@ function fullCourseData(): CourseData {
 describe('buildDeltaMsg', () => {
   it('emits all 16 paths in stable order', () => {
     const msg = buildDeltaMsg(fullCourseData(), 'GreatCircle')
-    const values = msg.updates[0].values
+    const values = msg.updates[0]!.values
 
     expect(values).to.have.lengthOf(16)
     const paths = values.map((v) => v.path)
@@ -63,7 +63,7 @@ describe('buildDeltaMsg', () => {
     const course = fullCourseData()
     const msg = buildDeltaMsg(course, 'GreatCircle')
     const byPath = Object.fromEntries(
-      msg.updates[0].values.map((v) => [v.path, v.value])
+      msg.updates[0]!.values.map((v) => [v.path, v.value])
     )
 
     expect(byPath['navigation.course.calcValues.calcMethod']).to.equal(
@@ -86,7 +86,7 @@ describe('buildDeltaMsg', () => {
     const course = fullCourseData()
     const msg = buildDeltaMsg(course, 'Rhumbline')
     const byPath = Object.fromEntries(
-      msg.updates[0].values.map((v) => [v.path, v.value])
+      msg.updates[0]!.values.map((v) => [v.path, v.value])
     )
 
     expect(byPath['navigation.course.calcValues.calcMethod']).to.equal(
@@ -105,7 +105,7 @@ describe('buildDeltaMsg', () => {
     const course = fullCourseData()
     const msg = buildDeltaMsg(course, 'GreatCircle')
     const byPath = Object.fromEntries(
-      msg.updates[0].values.map((v) => [v.path, v.value])
+      msg.updates[0]!.values.map((v) => [v.path, v.value])
     )
 
     expect(byPath['navigation.course.calcValues.velocityMadeGood']).to.equal(
@@ -122,7 +122,7 @@ describe('buildDeltaMsg', () => {
     }
     const msg = buildDeltaMsg(course, 'GreatCircle')
     const byPath = Object.fromEntries(
-      msg.updates[0].values.map((v) => [v.path, v.value])
+      msg.updates[0]!.values.map((v) => [v.path, v.value])
     )
 
     expect(byPath['navigation.course.calcValues.calcMethod']).to.equal(
@@ -150,7 +150,7 @@ describe('buildDeltaMsg', () => {
     }
     const msg = buildDeltaMsg(course, 'GreatCircle')
     const byPath = Object.fromEntries(
-      msg.updates[0].values.map((v) => [v.path, v.value])
+      msg.updates[0]!.values.map((v) => [v.path, v.value])
     )
 
     expect(byPath['navigation.course.calcValues.bearingTrackTrue']).to.be.null
@@ -166,7 +166,7 @@ describe('buildDeltaMsg', () => {
     }
     const msg = buildDeltaMsg(course, 'GreatCircle')
     const byPath = Object.fromEntries(
-      msg.updates[0].values.map((v) => [v.path, v.value])
+      msg.updates[0]!.values.map((v) => [v.path, v.value])
     )
 
     expect(byPath['navigation.course.calcValues.distance']).to.equal(0)
