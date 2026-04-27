@@ -181,6 +181,74 @@ describe('navigation.course.activeRoute dispatch', () => {
     stop()
   })
 
+  // Regression: out-of-order resolution of getWaypoints() between two
+  // route-activation events must not overwrite the newer route with the
+  // older one's late result. Previously every fetch unconditionally
+  // committed, so a slow A followed by a quick B left srcPaths pointing at
+  // B briefly and then A once A finally resolved.
+  it('drops a stale getWaypoints result when a newer route fetch has started', async () => {
+    const waypointsA = [
+      [10, 20],
+      [11, 21]
+    ]
+    const waypointsB = [
+      [30, 40],
+      [31, 41],
+      [32, 42]
+    ]
+    let resolveA: (value: any) => void = () => {}
+    const aPromise = new Promise<any>((r) => {
+      resolveA = r
+    })
+    const { deltaCallback, worker, stop } = startPlugin(
+      async (_resType: string, id: string) => {
+        if (id === 'route-a') return aPromise
+        if (id === 'route-b') {
+          return { feature: { geometry: { coordinates: waypointsB } } }
+        }
+        return null
+      }
+    )
+
+    // Activate route A — the fetch is pending until we explicitly resolve it.
+    deltaCallback({
+      updates: [
+        {
+          values: [
+            {
+              path: 'navigation.course.activeRoute',
+              value: { href: '/resources/routes/route-a', name: 'A' }
+            }
+          ]
+        }
+      ]
+    })
+    // Activate route B before A's fetch resolves; B's fetch resolves promptly.
+    deltaCallback({
+      updates: [
+        {
+          values: [
+            {
+              path: 'navigation.course.activeRoute',
+              value: { href: '/resources/routes/route-b', name: 'B' }
+            }
+          ]
+        }
+      ]
+    })
+    // Let B's microtasks settle so its result lands first.
+    await new Promise((r) => setTimeout(r, 0))
+
+    // Now A finally resolves — its result must NOT overwrite B.
+    resolveA({ feature: { geometry: { coordinates: waypointsA } } })
+    await new Promise((r) => setTimeout(r, 0))
+
+    const snapshot = await snapshotSrcPaths(deltaCallback, worker)
+    expect(snapshot.activeRoute.href).to.equal('/resources/routes/route-b')
+    expect(snapshot.activeRoute.waypoints).to.deep.equal(waypointsB)
+    stop()
+  })
+
   // Regression: switching from one route to another must replace the stored
   // activeRoute. Previously activeRouteId was only set when unset, and the
   // `value.href.includes(activeRouteId)` guard rejected any incoming value
