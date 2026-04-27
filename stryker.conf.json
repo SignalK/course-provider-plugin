@@ -17,9 +17,9 @@
   "disableTypeChecks": false,
   "ignorePatterns": [
     "coverage",
+    "plugin",
     "reports",
     ".stryker-tmp",
-    "plugin",
     "node_modules/.cache"
   ],
   "timeoutMS": 30000
