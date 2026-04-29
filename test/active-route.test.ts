@@ -31,7 +31,7 @@ class MockWorker {
 
 type DeltaCallback = (delta: unknown) => void
 
-function startPlugin(getResourceImpl: (id: string) => Promise<any>) {
+function startPlugin(getResourceImpl: (...args: any[]) => Promise<any>) {
   // Replace Worker on the singleton worker_threads module so the plugin's
   // `new Worker(...)` call constructs MockWorker instead. Re-applied per
   // start because sibling test files may have installed their own
@@ -178,6 +178,73 @@ describe('navigation.course.activeRoute dispatch', () => {
 
     const snapshot = await snapshotSrcPaths(deltaCallback, worker)
     expect(snapshot.activeRoute).to.be.null
+    stop()
+  })
+
+  // Regression: switching from one route to another must replace the stored
+  // activeRoute. Previously activeRouteId was only set when unset, and the
+  // `value.href.includes(activeRouteId)` guard rejected any incoming value
+  // whose href did not contain the original route id.
+  it('replaces stored activeRoute when a different route becomes active', async () => {
+    const waypointsA = [
+      [10, 20],
+      [11, 21]
+    ]
+    const waypointsB = [
+      [30, 40],
+      [31, 41],
+      [32, 42]
+    ]
+    const { deltaCallback, worker, server, stop } = startPlugin(
+      async (_resType: string, id: string) => {
+        if (id === 'route-a') {
+          return { feature: { geometry: { coordinates: waypointsA } } }
+        }
+        if (id === 'route-b') {
+          return { feature: { geometry: { coordinates: waypointsB } } }
+        }
+        return null
+      }
+    )
+
+    deltaCallback({
+      updates: [
+        {
+          values: [
+            {
+              path: 'navigation.course.activeRoute',
+              value: { href: '/resources/routes/route-a', name: 'A' }
+            }
+          ]
+        }
+      ]
+    })
+    await new Promise((r) => setTimeout(r, 0))
+    const afterA = await snapshotSrcPaths(deltaCallback, worker)
+    expect(afterA.activeRoute.href).to.equal('/resources/routes/route-a')
+    expect(afterA.activeRoute.waypoints).to.deep.equal(waypointsA)
+
+    // Switch to route B. Without the fix, srcPaths.activeRoute remains A.
+    deltaCallback({
+      updates: [
+        {
+          values: [
+            {
+              path: 'navigation.course.activeRoute',
+              value: { href: '/resources/routes/route-b', name: 'B' }
+            }
+          ]
+        }
+      ]
+    })
+    await new Promise((r) => setTimeout(r, 0))
+    const afterB = await snapshotSrcPaths(deltaCallback, worker)
+
+    expect(afterB.activeRoute.href).to.equal('/resources/routes/route-b')
+    expect(afterB.activeRoute.name).to.equal('B')
+    expect(afterB.activeRoute.waypoints).to.deep.equal(waypointsB)
+    expect(server.resourcesApi.getResource.calledWith('routes', 'route-b')).to
+      .be.true
     stop()
   })
 })
