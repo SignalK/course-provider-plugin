@@ -1,5 +1,6 @@
-import { CourseData, SKPaths } from '../types'
+import { CourseData, CourseResult, SKPaths } from '../types'
 import { LatLonSpherical as LatLon } from '../lib/geodesy/latlon-spherical.js'
+import { computeCourseGeometry } from '../lib/geodesy/course-math'
 
 export function parseSKPaths(src: SKPaths): boolean {
   return src['navigation.position'] &&
@@ -9,9 +10,7 @@ export function parseSKPaths(src: SKPaths): boolean {
     : false
 }
 
-const toRadians = (degrees: number) => (degrees * Math.PI) / 180
-
-const toDegrees = (radians: number) => (180 / Math.PI) * radians
+const TO_RAD = Math.PI / 180
 
 /** Normalises angle to a value within the range of a compass
  * @param angle: angle (in radians)
@@ -26,119 +25,58 @@ function compassAngle(angle: number): number {
       : angle
 }
 
-// Track bearing cache. The bearing from previousPoint to nextPoint depends
-// only on the route endpoints and magneticVariation, never on vessel
-// position, so it can be reused across ticks until any of those change.
-// Both great-circle and rhumb-line flavours are computed and stored together
-// because they share the same key inputs.
+// course calculations.
 //
-// trackBearings returns the cache record directly to avoid allocating a
-// fresh result object on every tick. Callers must treat the returned value
-// as read-only (the Readonly<> type enforces this at compile time).
-interface TrackBearingCache {
-  prevLat: number
-  prevLon: number
-  nextLat: number
-  nextLon: number
-  magVar: number
-  gcTrue: number
-  gcMagnetic: number
-  rlTrue: number
-  rlMagnetic: number
-}
-let trackBearingCache: TrackBearingCache | null = null
-
-function trackBearings(
-  startPoint: LatLon,
-  destination: LatLon,
-  magVar: number
-): Readonly<TrackBearingCache> {
-  const c = trackBearingCache
-  if (
-    c &&
-    c.magVar === magVar &&
-    c.prevLat === startPoint.lat &&
-    c.prevLon === startPoint.lon &&
-    c.nextLat === destination.lat &&
-    c.nextLon === destination.lon
-  ) {
-    return c
-  }
-  const gcTrue = toRadians(startPoint.initialBearingTo(destination))
-  const gcMagnetic = compassAngle(gcTrue + magVar)
-  const rlTrue = toRadians(startPoint.rhumbBearingTo(destination))
-  const rlMagnetic = compassAngle(rlTrue + magVar)
-  const fresh: TrackBearingCache = {
-    prevLat: startPoint.lat,
-    prevLon: startPoint.lon,
-    nextLat: destination.lat,
-    nextLon: destination.lon,
-    magVar,
-    gcTrue,
-    gcMagnetic,
-    rlTrue,
-    rlMagnetic
-  }
-  trackBearingCache = fresh
-  return fresh
-}
-
-// course calculations
+// All per-tick geodesy now goes through `computeCourseGeometry` from
+// `lib/geodesy/course-math.ts`: distance + bearing + xte + track bearing
+// + passedPerpendicular in one pass over pre-converted radian scalars,
+// no `LatLon` class allocations on the hot path. The vendored
+// `latlon-spherical.js` library stays for cold-path route/resource code
+// (see `routeRemaining` below).
 export function calcs(src: SKPaths): CourseData {
-  const vesselPosition = src['navigation.position']
-    ? new LatLon(
-        src['navigation.position'].latitude,
-        src['navigation.position'].longitude
-      )
-    : null
-  const destination = src['navigation.course.nextPoint']
-    ? new LatLon(
-        src['navigation.course.nextPoint'].position.latitude,
-        src['navigation.course.nextPoint'].position.longitude
-      )
-    : null
-  const startPoint = src['navigation.course.previousPoint'].position
-    ? new LatLon(
-        src['navigation.course.previousPoint'].position.latitude,
-        src['navigation.course.previousPoint'].position.longitude
-      )
-    : null
+  const pos = src['navigation.position']
+  const next = src['navigation.course.nextPoint']
+  const prev = src['navigation.course.previousPoint']
 
   const res: CourseData = { gc: {}, rl: {}, passedPerpendicular: false }
-  if (!vesselPosition || !destination || !startPoint) {
+  if (!pos || !next?.position || !prev?.position) {
     return res
   }
 
-  const xte = vesselPosition?.crossTrackDistanceTo(startPoint, destination)
+  const g = computeCourseGeometry(
+    pos.latitude * TO_RAD,
+    pos.longitude * TO_RAD,
+    next.position.latitude * TO_RAD,
+    next.position.longitude * TO_RAD,
+    prev.position.latitude * TO_RAD,
+    prev.position.longitude * TO_RAD
+  )
+
   const magVar = src['navigation.magneticVariation'] ?? 0.0
   const vmgValue = vmg(src)
-  const tb = trackBearings(startPoint, destination, magVar)
 
   // GreatCircle
-  const bearingTrackTrue = tb.gcTrue
-  const bearingTrue = toRadians(vesselPosition?.initialBearingTo(destination))
-  const bearingTrackMagnetic = tb.gcMagnetic
+  const bearingTrackTrue = g.trackBearingGcRad
+  const bearingTrue = g.bearingGcRad
+  const bearingTrackMagnetic = compassAngle(bearingTrackTrue + magVar)
   const bearingMagnetic = compassAngle(bearingTrue + magVar)
-  const gcDistance = vesselPosition?.distanceTo(destination)
-  const gcVmg = vmgValue
+  const gcDistance = g.distanceGc
   const gcVmc = vmc(src, bearingTrue, 'true') // for ETA, TTG - prefer 'true' values
   const gcTime = timeCalcs(src, gcDistance, gcVmc as number, false)
 
-  res.gc = {
+  const gcResult: CourseResult = {
     calcMethod: 'GreatCircle',
-    bearingTrackTrue: bearingTrackTrue,
-    bearingTrackMagnetic: bearingTrackMagnetic,
-    crossTrackError: xte,
+    bearingTrackTrue,
+    bearingTrackMagnetic,
+    crossTrackError: g.xte,
     distance: gcDistance,
-    bearingTrue: bearingTrue,
-    bearingMagnetic: bearingMagnetic,
-    velocityMadeGood: gcVmg,
+    bearingTrue,
+    bearingMagnetic,
+    velocityMadeGood: vmgValue,
     velocityMadeGoodToCourse: gcVmc,
     timeToGo: gcTime.nextPoint.ttg,
     estimatedTimeOfArrival: gcTime.nextPoint.eta,
-    previousPoint: {
-      distance: vesselPosition?.distanceTo(startPoint)
-    },
+    previousPoint: { distance: g.prevDistanceGc },
     route: {
       timeToGo: gcTime.route.ttg,
       estimatedTimeOfArrival: gcTime.route.eta,
@@ -146,32 +84,30 @@ export function calcs(src: SKPaths): CourseData {
     },
     targetSpeed: targetSpeed(src, gcDistance)
   }
+  res.gc = gcResult
 
   // Rhumbline
-  const rlBearingTrackTrue = tb.rlTrue
-  const rlBearingTrue = toRadians(vesselPosition?.rhumbBearingTo(destination))
-  const rlBearingTrackMagnetic = tb.rlMagnetic
+  const rlBearingTrackTrue = g.trackBearingRlRad
+  const rlBearingTrue = g.bearingRlRad
+  const rlBearingTrackMagnetic = compassAngle(rlBearingTrackTrue + magVar)
   const rlBearingMagnetic = compassAngle(rlBearingTrue + magVar)
-  const rlDistance = vesselPosition?.rhumbDistanceTo(destination)
-  const rlVmg = vmgValue
-  const rlVmc = vmc(src, rlBearingTrue, 'true') // for ETA, TTG - prefer 'true' values
+  const rlDistance = g.distanceRl
+  const rlVmc = vmc(src, rlBearingTrue, 'true')
   const rlTime = timeCalcs(src, rlDistance, rlVmc as number, true)
 
-  res.rl = {
+  const rlResult: CourseResult = {
     calcMethod: 'Rhumbline',
     bearingTrackTrue: rlBearingTrackTrue,
     bearingTrackMagnetic: rlBearingTrackMagnetic,
-    crossTrackError: xte,
+    crossTrackError: g.xte,
     distance: rlDistance,
     bearingTrue: rlBearingTrue,
     bearingMagnetic: rlBearingMagnetic,
-    velocityMadeGood: rlVmg,
+    velocityMadeGood: vmgValue,
     velocityMadeGoodToCourse: rlVmc,
     timeToGo: rlTime.nextPoint.ttg,
     estimatedTimeOfArrival: rlTime.nextPoint.eta,
-    previousPoint: {
-      distance: vesselPosition?.rhumbDistanceTo(startPoint)
-    },
+    previousPoint: { distance: g.prevDistanceRl },
     route: {
       timeToGo: rlTime.route.ttg,
       estimatedTimeOfArrival: rlTime.route.eta,
@@ -179,13 +115,9 @@ export function calcs(src: SKPaths): CourseData {
     },
     targetSpeed: targetSpeed(src, rlDistance, true)
   }
+  res.rl = rlResult
 
-  // passed destination perpendicular
-  res.passedPerpendicular = passedPerpendicular(
-    vesselPosition,
-    destination,
-    startPoint
-  )
+  res.passedPerpendicular = g.passedPerpendicular
 
   return res
 }
@@ -423,24 +355,9 @@ export function routeRemaining(src: SKPaths, rhumbLine?: boolean): number {
   return useRhumbLine ? totalRl : totalGc
 }
 
-// return true if vessel is past perpendicular of destination
-export function passedPerpendicular(
-  vesselPosition: LatLon,
-  destination: LatLon,
-  startPoint: LatLon
-): boolean {
-  const ds = destination.initialBearingTo(startPoint)
-  const dv = destination.initialBearingTo(vesselPosition)
-  const diff = toDegrees(Angle.difference(toRadians(ds), toRadians(dv)))
-  return Math.abs(diff) > 90
-}
-
+// Helper used by `vmc` to fold the |bearing - cog| difference into [0, π].
 class Angle {
-  /** difference between two angles (in radians)
-   * @param h: angle 1
-   * @param b: angle 2
-   * @returns angle (-ive = port)
-   */
+  /** Signed angle difference (radians); negative result means port. */
   static difference(h: number, b: number): number {
     const d = Math.PI * 2 - b
     const hd = h + d
@@ -448,19 +365,7 @@ class Angle {
     return a < Math.PI ? 0 - a : Math.PI * 2 - a
   }
 
-  /** Add two angles (in radians)
-   * @param h: angle 1
-   * @param b: angle 2
-   * @returns sum angle
-   */
-  static add(h: number, b: number): number {
-    return Angle.normalise(h + b)
-  }
-
-  /** Normalises angle to a value between 0 & 2Pi radians
-   * @param a: angle
-   * @returns value between 0-2Pi
-   */
+  /** Normalises an angle to [0, 2π). */
   static normalise(a: number): number {
     const pi2 = Math.PI * 2
     return a < 0 ? a + pi2 : a >= pi2 ? a - pi2 : a

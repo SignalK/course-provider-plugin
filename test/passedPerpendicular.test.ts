@@ -1,36 +1,56 @@
 import { expect } from 'chai'
-import { LatLonSpherical } from '../src/lib/geodesy/latlon-spherical'
-import { passedPerpendicular } from '../src/worker/course'
+import { computeCourseGeometry } from '../src/lib/geodesy/course-math'
+
+const TO_RAD = Math.PI / 180
+
+interface Pt {
+  lat: number
+  lon: number
+}
+
+// Real-world regression fixtures from prior incidents (Götenburg coastal
+// + a Pacific dateline-crossing leg). Each call exercises the
+// passedPerpendicular flag inside the single-pass course-math output.
+function passedPerpendicular(vessel: Pt, dest: Pt, start: Pt): boolean {
+  return computeCourseGeometry(
+    vessel.lat * TO_RAD,
+    vessel.lon * TO_RAD,
+    dest.lat * TO_RAD,
+    dest.lon * TO_RAD,
+    start.lat * TO_RAD,
+    start.lon * TO_RAD
+  ).passedPerpendicular
+}
 
 describe('Passed Perpendicular', () => {
   it('(+ive diff) should return FALSE', () => {
-    const startPosition = new LatLonSpherical(57.58684, 11.106578)
-    const destPosition = new LatLonSpherical(57.61672, 11.10488)
-    const vesselPosition = new LatLonSpherical(57.61657, 11.10054)
+    const startPosition = { lat: 57.58684, lon: 11.106578 }
+    const destPosition = { lat: 57.61672, lon: 11.10488 }
+    const vesselPosition = { lat: 57.61657, lon: 11.10054 }
     expect(passedPerpendicular(vesselPosition, destPosition, startPosition)).to
       .be.false
   })
 
   it('(+ive diff) should return TRUE', () => {
-    const startPosition = new LatLonSpherical(57.58684, 11.106578)
-    const destPosition = new LatLonSpherical(57.61672, 11.10488)
-    const vesselPosition = new LatLonSpherical(57.61905, 11.10306)
+    const startPosition = { lat: 57.58684, lon: 11.106578 }
+    const destPosition = { lat: 57.61672, lon: 11.10488 }
+    const vesselPosition = { lat: 57.61905, lon: 11.10306 }
     expect(passedPerpendicular(vesselPosition, destPosition, startPosition)).to
       .be.true
   })
 
   it('(-ive diff) should return FALSE', () => {
-    const startPosition = new LatLonSpherical(57.58684, 11.106578)
-    const destPosition = new LatLonSpherical(57.61672, 11.10488)
-    const vesselPosition = new LatLonSpherical(57.61505, 11.10054)
+    const startPosition = { lat: 57.58684, lon: 11.106578 }
+    const destPosition = { lat: 57.61672, lon: 11.10488 }
+    const vesselPosition = { lat: 57.61505, lon: 11.10054 }
     expect(passedPerpendicular(vesselPosition, destPosition, startPosition)).to
       .be.false
   })
 
   it('(-ive diff) should return TRUE', () => {
-    const startPosition = new LatLonSpherical(57.58684, 11.106578)
-    const destPosition = new LatLonSpherical(57.61672, 11.10488)
-    const vesselPosition = new LatLonSpherical(57.61905, 11.10306)
+    const startPosition = { lat: 57.58684, lon: 11.106578 }
+    const destPosition = { lat: 57.61672, lon: 11.10488 }
+    const vesselPosition = { lat: 57.61905, lon: 11.10306 }
     expect(passedPerpendicular(vesselPosition, destPosition, startPosition)).to
       .be.true
   })
@@ -38,33 +58,33 @@ describe('Passed Perpendicular', () => {
 
 describe('Dateline crossing', () => {
   it('(E to W) should return FALSE', () => {
-    const startPosition = new LatLonSpherical(-35.9749, 179.89971)
-    const destPosition = new LatLonSpherical(-35.95874, -179.22151)
-    const vesselPosition = new LatLonSpherical(-35.93179, 179.933)
+    const startPosition = { lat: -35.9749, lon: 179.89971 }
+    const destPosition = { lat: -35.95874, lon: -179.22151 }
+    const vesselPosition = { lat: -35.93179, lon: 179.933 }
     expect(passedPerpendicular(vesselPosition, destPosition, startPosition)).to
       .be.false
   })
 
   it('(E to W) should return TRUE', () => {
-    const startPosition = new LatLonSpherical(-35.9749, 179.89971)
-    const destPosition = new LatLonSpherical(-35.95874, -179.22151)
-    const vesselPosition = new LatLonSpherical(-35.90753, -179.21486)
+    const startPosition = { lat: -35.9749, lon: 179.89971 }
+    const destPosition = { lat: -35.95874, lon: -179.22151 }
+    const vesselPosition = { lat: -35.90753, lon: -179.21486 }
     expect(passedPerpendicular(vesselPosition, destPosition, startPosition)).to
       .be.true
   })
 
   it('(W to E) should return FALSE', () => {
-    const startPosition = new LatLonSpherical(-35.95874, -179.22151)
-    const destPosition = new LatLonSpherical(-35.9749, 179.89971)
-    const vesselPosition = new LatLonSpherical(-35.93179, -179.95716)
+    const startPosition = { lat: -35.95874, lon: -179.22151 }
+    const destPosition = { lat: -35.9749, lon: 179.89971 }
+    const vesselPosition = { lat: -35.93179, lon: -179.95716 }
     expect(passedPerpendicular(vesselPosition, destPosition, startPosition)).to
       .be.false
   })
 
   it('(W to E) should return TRUE', () => {
-    const startPosition = new LatLonSpherical(-35.95874, -179.22151)
-    const destPosition = new LatLonSpherical(-35.9749, 179.89971)
-    const vesselPosition = new LatLonSpherical(-35.90753, 179.87308)
+    const startPosition = { lat: -35.95874, lon: -179.22151 }
+    const destPosition = { lat: -35.9749, lon: 179.89971 }
+    const vesselPosition = { lat: -35.90753, lon: 179.87308 }
     expect(passedPerpendicular(vesselPosition, destPosition, startPosition)).to
       .be.true
   })
