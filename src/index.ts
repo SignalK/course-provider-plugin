@@ -17,14 +17,8 @@ import { Application, Request, Response } from 'express'
 import { NotificationMgr, Watcher, WatchEvent } from './lib/alarms'
 import { buildDeltaMsg, CalcMethod } from './lib/delta-msg'
 import { CourseData, SKPaths } from './types'
-// Course-calculation helpers. (The './worker/' path is a misnomer — these
-// are plain functions, not a worker thread.)
-import {
-  calcs,
-  emptyCourseData,
-  parseSKPaths,
-  resetCaches
-} from './worker/course'
+// Course-calculation helpers.
+import { calcs, emptyCourseData, parseSKPaths, resetCaches } from './lib/course'
 
 import { Subscription } from 'rxjs'
 
@@ -215,8 +209,8 @@ module.exports = (server: CourseComputerApp): Plugin => {
         server.debug(`Applied config: ${JSON.stringify(config)}`)
       }
 
-      // activeDest, metaSent, and the course module's bearing/route
-      // caches live beyond a single plugin instance (closure and module
+      // activeDest, metaSent, and the course module's route-remaining
+      // cache live beyond a single plugin instance (closure and module
       // scope) and survive a stop/start cycle within the same server
       // process. Reset them on each start so a restart cannot inherit the
       // previous run's latched state or a stale cached calculation.

@@ -7,7 +7,7 @@ type CalcsSpy = Spy<(src: SKPaths) => CourseData>
 
 // Per-test mock-restore latch. Set by startPluginCapturingDelta(),
 // torn down in afterEach so a failed assertion cannot leak the
-// `src/worker/course` stub into a later test file.
+// `src/lib/course` stub into a later test file.
 let restoreCourse: (() => void) | null = null
 
 afterEach(() => {
@@ -55,7 +55,7 @@ function startPluginCapturingDelta(opts: StartOptions = {}): {
   const calcsSpy = spy<(src: SKPaths) => CourseData>(
     opts.calcsImpl ?? (() => fixed)
   )
-  restoreCourse = mockModule('../src/worker/course', {
+  restoreCourse = mockModule('../src/lib/course', {
     calcs: calcsSpy,
     parseSKPaths: opts.parseSKPaths ?? (() => true),
     emptyCourseData: () => ({ gc: {}, rl: {}, passedPerpendicular: false }),
@@ -315,8 +315,6 @@ describe('delta handler dispatch', () => {
 // Pins the activeDest flip — the cleared-state delta has to fire
 // exactly once when the navigation context becomes incomplete after
 // being complete, then stay silent until it becomes complete again.
-// Pre-refactor this lived in the worker module; now it lives in the
-// plugin closure.
 describe('activeDest flip', () => {
   it('emits one calc, one cleared-state delta, then stays silent on idle ticks', () => {
     let parseResult = true

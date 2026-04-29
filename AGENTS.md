@@ -5,8 +5,8 @@ The course-provider plugin computes course values (distance, bearing, ETA, route
 Key components:
 
 - **Plugin entrypoint**: `src/index.ts` — wires Signal K delta subscriptions, runs the course calculations on each tick, publishes deltas back to the server
-- **Calculations**: `src/worker/course.ts` — pure course math; on every position tick computes both `gc` (great-circle) and `rl` (rhumb-line) branches plus `passedPerpendicular`. (The `worker/` directory name is a misnomer — these are plain functions, not a worker thread.)
-- **Geodesy**: `src/lib/geodesy/latlon-spherical.js` — Chris Veness' library, vendored
+- **Calculations**: `src/lib/course.ts` — pure course math; on every position tick computes both `gc` (great-circle) and `rl` (rhumb-line) branches plus `passedPerpendicular`
+- **Geodesy**: `src/lib/course-math.ts` — thin per-tick geometry (`computeCourseGeometry` plus great-circle / rhumb distance helpers); formulas adapted from Chris Veness' spherical geodesy library (MIT)
 - **Delta builder**: `src/lib/delta-msg.ts` — fixed-shape values array for the `calcValues.*` delta
 - **Benchmarks**: `bench/` — mitata-based dispatch benchmark for A/B-ing perf changes (see `bench/README.md`)
 
@@ -47,20 +47,21 @@ The plugin runs at 1-2 Hz on every `navigation.position` delta on Raspberry Pi 3
 
 Per `navigation.position` delta:
 
-`src/index.ts` `calc()` → `src/worker/course.ts` `calcs(srcPaths)` → `src/index.ts` `calcResult(result)` → `src/lib/delta-msg.ts` `buildDeltaMsg(...)` → `server.handleMessage(...)`.
+`src/index.ts` `calc()` → `src/lib/course.ts` `calcs(srcPaths)` → `src/index.ts` `calcResult(result)` → `src/lib/delta-msg.ts` `buildDeltaMsg(...)` → `server.handleMessage(...)`.
 
 Files in scope:
 
 - `src/index.ts` `calc`, `calcResult`, the subscribe callback — per delta
-- `src/worker/course.ts` `calcs`, `routeRemaining`, `trackBearings`, `passedPerpendicular`, `vmc`, `vmg` — per position tick
+- `src/lib/course.ts` `calcs`, `routeRemaining`, `vmc`, `vmg` — per position tick
+- `src/lib/course-math.ts` `computeCourseGeometry` — the geodesy hot path, one call per tick
 - `src/lib/delta-msg.ts` `buildDeltaMsg` — per position tick
 
 ### Rules
 
 - **Guard `debug()` arguments.** `debug('x=' + JSON.stringify(obj))` evaluates the argument eagerly even when debug is off. Wrap with `debug.enabled &&` for anything that allocates (string concatenation, `JSON.stringify`).
 - **Build objects in their final shape.** On hot paths, write all properties in a single object literal with consistent key order so V8 keeps a stable hidden class. Do not build up objects incrementally via spread or `Object.assign`. See `buildDeltaMsg` for the fixed-shape pattern.
-- **Minimize per-tick allocations.** Hoist constants to module scope. Reuse cursors instead of allocating two `LatLon` objects per loop iteration (see `routeRemaining`).
-- **Cache values that don't change every tick.** Track bearings (prev → next) depend only on endpoints and `magVar`, not on vessel position. Route-remaining distance depends on waypoints, `pointIndex`, and `reverse`, not on vessel position. See `trackBearingCache` and `routeRemainingCache` in `src/worker/course.ts`.
+- **Minimize per-tick allocations.** Hoist constants to module scope. On the hot path pass pre-converted radian scalars rather than allocating geometry objects; `routeRemaining` advances its running point as scalars, one segment at a time.
+- **Cache values that don't change every tick.** Route-remaining distance depends on waypoints, `pointIndex`, and `reverse`, not on vessel position. See `routeRemainingCache` in `src/lib/course.ts`.
 - **`calcs()` receives `srcPaths` by reference.** There is no per-tick structured clone, so caches may key on array references directly — `srcPaths['activeRoute'].waypoints` keeps its identity across ticks until a route change reassigns it (see `routeRemainingCache`).
 - **Use `Date.now()` for arithmetic, `new Date(ms).toISOString()` only for the final ETA string.** Avoid `Date` allocations in the math.
 - **Use `structuredClone`** for deep cloning, not `JSON.parse(JSON.stringify(...))`.

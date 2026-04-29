@@ -1,55 +1,69 @@
 import { expect } from 'chai'
 import { mockModule, resetModuleCache } from './helpers'
 
-// LatLon stub. Methods return deterministic values derived from the points'
-// coordinates so tests can predict output and assert on call counts.
+const TO_RAD = Math.PI / 180
+
+// Stub the two course-math distance helpers that routeRemaining calls.
+// They receive radian scalars; the fixtures below use whole-degree
+// waypoints, so the stub recovers the integer-degree delta (rounding away
+// the deg→rad→deg round-trip error) and maps it to a predictable value:
 //
-// distance(a, b)        = hypot(dLat, dLon) * 1000   (m)
-// rhumbDistance(a, b)   = distance(a, b) + 0.5
+//   greatCircleDistance = hypot(ΔlatDeg, ΔlonDeg) * 1000   (m)
+//   rhumbDistance       = greatCircleDistance + 0.5         (m)
 //
-// `callCounts` is reset between tests to assert how often distanceTo /
-// rhumbDistanceTo are called per cache hit / miss.
+// `callCounts` is reset between tests to assert how often each helper is
+// called per cache hit / miss.
 const callCounts = {
-  distanceTo: 0,
-  rhumbDistanceTo: 0
+  greatCircle: 0,
+  rhumb: 0
 }
 
-class StubLatLon {
-  constructor(
-    public lat: number,
-    public lon: number
-  ) {}
-  distanceTo(other: StubLatLon): number {
-    callCounts.distanceTo++
-    const dLat = other.lat - this.lat
-    const dLon = other.lon - this.lon
-    return Math.hypot(dLat, dLon) * 1000
+function segmentMeters(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const dLatRaw = (lat2 - lat1) / TO_RAD
+  const dLonRaw = (lon2 - lon1) / TO_RAD
+  const dLat = Math.round(dLatRaw)
+  const dLon = Math.round(dLonRaw)
+  // The fixtures use whole-degree waypoints; the rounding above only
+  // absorbs deg→rad→deg float error. Fail loudly if a fixture ever uses a
+  // fractional coordinate, since rounding would otherwise mask a wrong total.
+  if (Math.abs(dLatRaw - dLat) > 1e-6 || Math.abs(dLonRaw - dLon) > 1e-6) {
+    throw new Error('route-remaining fixtures must use whole-degree waypoints')
   }
-  rhumbDistanceTo(other: StubLatLon): number {
-    callCounts.rhumbDistanceTo++
-    // Inlined rather than calling distanceTo so the count for the latter
-    // does not include internal calls.
-    const dLat = other.lat - this.lat
-    const dLon = other.lon - this.lon
-    return Math.hypot(dLat, dLon) * 1000 + 0.5
-  }
-  initialBearingTo(other: StubLatLon): number {
-    return ((other.lon - this.lon) * 90 + 360) % 360
-  }
-  rhumbBearingTo(other: StubLatLon): number {
-    return ((((other.lon - this.lon) * 90 + 360) % 360) + 1) % 360
-  }
-  crossTrackDistanceTo(_a: StubLatLon, _b: StubLatLon): number {
-    return 0
-  }
+  return Math.hypot(dLat, dLon) * 1000
 }
 
-let restoreLatLon: () => void = () => {}
+function stubGreatCircleDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  callCounts.greatCircle++
+  return segmentMeters(lat1, lon1, lat2, lon2)
+}
+
+function stubRhumbDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  callCounts.rhumb++
+  // +0.5 per segment so the rhumb total is distinguishable from the gc one.
+  return segmentMeters(lat1, lon1, lat2, lon2) + 0.5
+}
+
+let restoreCourseMath: () => void = () => {}
 
 function loadRouteRemaining(): (src: any, useRhumbLine: boolean) => number {
-  resetModuleCache('../src/worker/course')
+  resetModuleCache('../src/lib/course')
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const mod = require('../src/worker/course') as any
+  const mod = require('../src/lib/course') as any
   return mod.routeRemaining
 }
 
@@ -73,24 +87,30 @@ function routeSrc(): Record<string, any> {
   }
 }
 
-describe('routeRemaining cache and cursor reuse', () => {
+describe('routeRemaining cache and segment summation', () => {
   let routeRemaining: (src: any, useRhumbLine: boolean) => number
 
   before(() => {
-    restoreLatLon = mockModule('../src/lib/geodesy/latlon-spherical.js', {
-      LatLonSpherical: StubLatLon
+    // Preserve the real exports (calcs needs computeCourseGeometry) and
+    // override only the two distance helpers with counting stubs.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const realCourseMath = require('../src/lib/course-math')
+    restoreCourseMath = mockModule('../src/lib/course-math', {
+      ...realCourseMath,
+      greatCircleDistance: stubGreatCircleDistance,
+      rhumbDistance: stubRhumbDistance
     })
   })
 
   after(() => {
-    restoreLatLon()
-    resetModuleCache('../src/worker/course')
+    restoreCourseMath()
+    resetModuleCache('../src/lib/course')
   })
 
   beforeEach(() => {
     routeRemaining = loadRouteRemaining()
-    callCounts.distanceTo = 0
-    callCounts.rhumbDistanceTo = 0
+    callCounts.greatCircle = 0
+    callCounts.rhumb = 0
   })
 
   it('returns the great-circle total of remaining segments', () => {
@@ -108,23 +128,23 @@ describe('routeRemaining cache and cursor reuse', () => {
 
     // After the first call, both gc and rl totals are cached. Subsequent
     // calls in either flavour must not recompute.
-    callCounts.distanceTo = 0
-    callCounts.rhumbDistanceTo = 0
+    callCounts.greatCircle = 0
+    callCounts.rhumb = 0
     const gcSecond = routeRemaining(src, false)
     const rlAfterGc = routeRemaining(src, true)
 
     expect(gcSecond).to.equal(gcFirst)
     expect(rlAfterGc).to.equal(3001.5)
-    expect(callCounts.distanceTo).to.equal(0)
-    expect(callCounts.rhumbDistanceTo).to.equal(0)
+    expect(callCounts.greatCircle).to.equal(0)
+    expect(callCounts.rhumb).to.equal(0)
   })
 
-  it('runs exactly one distance call per segment per flavour (no double allocation)', () => {
+  it('runs exactly one distance call per segment per flavour', () => {
     routeRemaining(routeSrc(), false)
-    // 4 waypoints, fromIndex 0, toIndex 3 -> 3 segments. With cursor reuse
-    // and both-flavours-in-one-pass: 3 distanceTo + 3 rhumbDistanceTo.
-    expect(callCounts.distanceTo).to.equal(3)
-    expect(callCounts.rhumbDistanceTo).to.equal(3)
+    // 4 waypoints, fromIndex 0, toIndex 3 -> 3 segments. Both flavours are
+    // computed in one pass: 3 greatCircleDistance + 3 rhumbDistance.
+    expect(callCounts.greatCircle).to.equal(3)
+    expect(callCounts.rhumb).to.equal(3)
   })
 
   it('invalidates when waypoints array reference changes', () => {
@@ -134,11 +154,11 @@ describe('routeRemaining cache and cursor reuse', () => {
     // the main thread's `srcPaths['activeRoute'].waypoints = waypoints`
     // reassignment in handleRouteUpdate / handleActiveRoute.
     const replaced = routeSrc()
-    replaced.activeRoute.waypoints[3] = [4, 0] // total now 4 segments worth
-    callCounts.distanceTo = 0
+    replaced.activeRoute.waypoints[3] = [4, 0] // last segment now 2deg
+    callCounts.greatCircle = 0
     const total = routeRemaining(replaced, false)
 
-    expect(callCounts.distanceTo).to.be.greaterThan(0)
+    expect(callCounts.greatCircle).to.be.greaterThan(0)
     expect(total).to.equal(4000)
   })
 
@@ -161,11 +181,11 @@ describe('routeRemaining cache and cursor reuse', () => {
 
     // Reset counter; flipping `reverse` must force a recompute even though
     // the waypoints array reference and pointIndex are unchanged.
-    callCounts.distanceTo = 0
+    callCounts.greatCircle = 0
     src.activeRoute.reverse = true
     routeRemaining(src, false)
 
-    expect(callCounts.distanceTo).to.be.greaterThan(0)
+    expect(callCounts.greatCircle).to.be.greaterThan(0)
   })
 
   it('returns 0 in reverse when pointIndex equals lastIndex', () => {
@@ -210,19 +230,19 @@ describe('routeRemaining cache and cursor reuse', () => {
 
     // Same src (same waypoints reference, pointIndex, reverse) normally
     // hits the cache and does zero distance calls.
-    callCounts.distanceTo = 0
+    callCounts.greatCircle = 0
     routeRemaining(src, false)
-    expect(callCounts.distanceTo).to.equal(0)
+    expect(callCounts.greatCircle).to.equal(0)
 
     // resetCaches() (called by the plugin on each startup) must clear the
     // cache so the very same inputs recompute afterwards.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { resetCaches } = require('../src/worker/course') as {
+    const { resetCaches } = require('../src/lib/course') as {
       resetCaches: () => void
     }
     resetCaches()
-    callCounts.distanceTo = 0
+    callCounts.greatCircle = 0
     routeRemaining(src, false)
-    expect(callCounts.distanceTo).to.be.greaterThan(0)
+    expect(callCounts.greatCircle).to.be.greaterThan(0)
   })
 })
