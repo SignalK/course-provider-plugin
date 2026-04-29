@@ -17,9 +17,8 @@ import { Application, Request, Response } from 'express'
 import { NotificationMgr, Watcher, WatchEvent } from './lib/alarms'
 import { buildDeltaMsg, CalcMethod } from './lib/delta-msg'
 import { CourseData, SKPaths } from './types'
+import { calcs, parseSKPaths } from './worker/course'
 
-import path from 'path'
-import { Worker } from 'worker_threads'
 import { Subscription } from 'rxjs'
 
 interface CourseComputerApp extends Application, ServerAPI {
@@ -101,7 +100,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
   watchPassedDest.rangeMax = 2
   let unsubscribes: any[] = [] // delta stream subscriptions
   let obs: any[] = [] // Observables subscription
-  let worker: Worker | null = null
 
   const SIGNALK_API_PATH = `/signalk/v2/api`
   const COURSE_CALCS_PATH = `${SIGNALK_API_PATH}/vessels/self/navigation/course/calcValues`
@@ -121,6 +119,12 @@ module.exports = (server: CourseComputerApp): Plugin => {
   // result if its token is still the latest one, so concurrent or
   // out-of-order fetches cannot let an older resource overwrite a newer one.
   let routeFetchToken = 0
+
+  // Tracks whether the previous tick had a complete navigation context
+  // (position + nextPoint + previousPoint). When the context becomes
+  // incomplete (e.g., user clears the active route) we emit an empty
+  // result delta exactly once so subscribers see the cleared state.
+  let activeDest = false
 
   let metaSent = false
 
@@ -162,8 +166,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
       // setup subscriptions
       initSubscriptions(SRC_PATHS)
-      // setup worker(s)
-      initWorkers()
       // setup routes
       initEndpoints()
 
@@ -186,12 +188,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
     unsubscribes = []
     obs.forEach((o: Subscription) => o.unsubscribe())
     obs = []
-    if (worker) {
-      server.debug('** Stopping Worker(s) **')
-      worker.removeAllListeners()
-      worker.terminate()
-      worker = null
-    }
     const msg = 'Stopped'
     server.setPluginStatus(msg)
   }
@@ -260,22 +256,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
         onPassedDestEvent(event)
       })
     )
-  }
-
-  // initialise calculation worker(s)
-  const initWorkers = () => {
-    server.debug('Initialising worker thread....')
-    worker = new Worker(path.resolve(__dirname, './worker/course.js'))
-    worker.on('message', (msg) => {
-      calcResult(msg)
-    })
-    worker.on('error', (error) => console.error('** worker.error:', error))
-    worker.on('exit', (code) => {
-      if (code !== 0) {
-        console.error('** worker.exit:', `Stopped with exit code ${code}`)
-      }
-    })
-    worker.unref()
   }
 
   // initialise api endpoints
@@ -399,13 +379,22 @@ module.exports = (server: CourseComputerApp): Plugin => {
         )}`
       )
     }
-    if (srcPaths['navigation.position']) {
-      if (server.debug.enabled) {
-        server.debug(JSON.stringify(srcPaths))
-      }
-      worker?.postMessage(srcPaths)
-    } else {
+    if (!srcPaths['navigation.position']) {
       server.debug('No vessel position.....Skipping calc()')
+      return
+    }
+    if (server.debug.enabled) {
+      server.debug(JSON.stringify(srcPaths))
+    }
+    if (parseSKPaths(srcPaths)) {
+      calcResult(calcs(srcPaths))
+      activeDest = true
+    } else if (activeDest) {
+      // The previous tick had a complete context but this one does not
+      // (e.g., the active route was just cleared). Emit an empty result
+      // exactly once so subscribers see the cleared values.
+      calcResult({ gc: {}, rl: {}, passedPerpendicular: false })
+      activeDest = false
     }
   }
 

@@ -1,12 +1,9 @@
 # Course Provider — benchmarks
 
-Tinybench-based microbenchmarks for the in-process delta dispatcher.
-The `worker_threads.Worker` is mocked so we measure the dispatcher in
-`src/index.ts` (subscribe callback → `srcPaths` update → mock
-`postMessage`) plus the `lib/delta-msg` and `lib/alarms` helpers it
-touches. The actual geodesy maths runs on the worker thread in
-production and is benchmarked separately if needed; the in-flight
-`perf/*` PRs all target the in-process side.
+Mitata-based microbenchmarks for the in-process delta path. Each scenario
+drives synthetic deltas through the plugin's subscribe callback and
+measures the full per-tick cost: `srcPaths` update + `parseSKPaths` +
+`calcs` + `buildDeltaMsg` + `lib/alarms`.
 
 ## Run
 
@@ -84,12 +81,9 @@ plus two delta builders (`positionDelta`, `multiValueDelta`).
 
 ## Caveats
 
-- The worker is mocked, so worker-side optimisations (e.g. changes to
-  the geodesy code in `src/worker/`) won't show up here.
 - Microsecond-level numbers are noisy. Use the JSON capture + compare
   flow rather than eyeballing a single run, and run on the same
   machine (ideally with no other load) for both baseline and
   candidate.
-- `samplesCount` differs between runs because tinybench targets a
-  fixed wall-clock budget per task (~1.5 s). Faster scenarios get more
-  samples.
+- `samplesCount` differs between runs because mitata targets a
+  fixed wall-clock budget per task. Faster scenarios get more samples.

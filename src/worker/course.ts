@@ -1,21 +1,5 @@
-import { parentPort } from 'worker_threads'
 import { CourseData, SKPaths } from '../types'
 import { LatLonSpherical as LatLon } from '../lib/geodesy/latlon-spherical.js'
-
-let activeDest = false
-
-// process message from main thread
-parentPort?.on('message', (message: SKPaths) => {
-  if (parseSKPaths(message)) {
-    parentPort?.postMessage(calcs(message))
-    activeDest = true
-  } else {
-    if (activeDest) {
-      parentPort?.postMessage({ gc: {}, rl: {} })
-      activeDest = false
-    }
-  }
-})
 
 export function parseSKPaths(src: SKPaths): boolean {
   return src['navigation.position'] &&
