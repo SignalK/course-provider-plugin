@@ -116,6 +116,12 @@ module.exports = (server: CourseComputerApp): Plugin => {
   // tick — array references would not.
   let waypointsVersion = 0
 
+  // Monotonic token bumped before every getWaypoints() fetch and on
+  // activeRoute clear. The handler that initiated a fetch only commits its
+  // result if its token is still the latest one, so concurrent or
+  // out-of-order fetches cannot let an older resource overwrite a newer one.
+  let routeFetchToken = 0
+
   let metaSent = false
 
   // ******** REQUIRED PLUGIN DEFINITION *******
@@ -314,7 +320,13 @@ module.exports = (server: CourseComputerApp): Plugin => {
         // non-empty string, but `noUncheckedIndexedAccess` types it as
         // `string | undefined`. Empty fallback is unreachable in practice.
         activeRouteId = ci.activeRoute.href.split('/').slice(-1)[0] ?? ''
+        const myToken = ++routeFetchToken
         const waypoints = await getWaypoints(activeRouteId)
+        // initSubscriptions does not await getPaths, so a delta fired during
+        // startup can complete its fetch first; drop our result if so.
+        if (myToken !== routeFetchToken) {
+          return
+        }
         srcPaths['activeRoute'].waypoints = waypoints
         srcPaths['activeRoute'].waypointsVersion = ++waypointsVersion
       }
@@ -335,7 +347,13 @@ module.exports = (server: CourseComputerApp): Plugin => {
     server.debug(`*** handleRouteUpdate *** ${JSON.stringify(msg)}`)
     if (msg.path.endsWith(activeRouteId as string)) {
       server.debug(`*** matched activeRouteId *** ${activeRouteId}`)
+      const myToken = ++routeFetchToken
       const waypoints = await getWaypoints(activeRouteId as string)
+      // A newer fetch (another resources.routes update or a route switch)
+      // has been issued in the meantime; drop our stale result.
+      if (myToken !== routeFetchToken) {
+        return
+      }
       srcPaths['activeRoute'].waypoints = waypoints
       srcPaths['activeRoute'].waypointsVersion = ++waypointsVersion
     }
@@ -346,19 +364,23 @@ module.exports = (server: CourseComputerApp): Plugin => {
     server.debug(`*** handleActiveRoute *** ${JSON.stringify(value)}`)
 
     if (!value) {
+      // Bump the token so any in-flight fetch from a previous activation is
+      // ignored when it eventually resolves.
+      routeFetchToken++
       srcPaths['activeRoute'] = null
       activeRouteId = undefined
       return
     }
 
     // Always derive activeRouteId from the incoming value so a switch from
-    // one route to another takes effect. The previous code only assigned
-    // activeRouteId when it was unset and then guarded the waypoint fetch
-    // on `value.href.includes(activeRouteId)`, which silently rejected the
-    // new value and left srcPaths pointing at the old route.
+    // one route to another takes effect.
     const newId = value.href.split('/').slice(-1)[0] ?? ''
     activeRouteId = newId
+    const myToken = ++routeFetchToken
     const waypoints = await getWaypoints(newId)
+    if (myToken !== routeFetchToken) {
+      return
+    }
     srcPaths['activeRoute'] = Object.assign({}, value, {
       waypoints: waypoints,
       waypointsVersion: ++waypointsVersion
