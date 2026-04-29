@@ -108,12 +108,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
   let courseCalcs: CourseData
   let activeRouteId: string | undefined
 
-  // Monotonic counter bumped whenever activeRoute.waypoints is (re)assigned.
-  // The worker keys its routeRemaining cache on this number so the cache
-  // survives the structured clone that worker.postMessage performs on every
-  // tick — array references would not.
-  let waypointsVersion = 0
-
   // Monotonic token bumped before every getWaypoints() fetch and on
   // activeRoute clear. The handler that initiated a fetch only commits its
   // result if its token is still the latest one, so concurrent or
@@ -315,7 +309,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
           return
         }
         srcPaths['activeRoute'].waypoints = waypoints
-        srcPaths['activeRoute'].waypointsVersion = ++waypointsVersion
       }
     }
     server.debug(`[srcPaths]: ${JSON.stringify(srcPaths)}`)
@@ -342,7 +335,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
         return
       }
       srcPaths['activeRoute'].waypoints = waypoints
-      srcPaths['activeRoute'].waypointsVersion = ++waypointsVersion
     }
   }
 
@@ -369,8 +361,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
       return
     }
     srcPaths['activeRoute'] = Object.assign({}, value, {
-      waypoints: waypoints,
-      waypointsVersion: ++waypointsVersion
+      waypoints: waypoints
     })
     server.debug(
       `*** activeRoute *** ${JSON.stringify(srcPaths['activeRoute'])}`
@@ -406,7 +397,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
   }
 
   // send calculation results delta
-  const calcResult = async (result: CourseData) => {
+  const calcResult = (result: CourseData) => {
     server.debug(`*** calculation result ***`)
     if (server.debug.enabled) {
       server.debug(JSON.stringify(result))

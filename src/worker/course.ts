@@ -340,13 +340,12 @@ export function targetSpeed(
 // per tick (gc/rl × timeCalcs/targetSpeed). Both flavours share the same
 // key inputs and are computed together in one cursor pass on miss.
 //
-// The cache is keyed on `waypointsVersion`, a primitive bumped by the main
-// thread whenever it (re)assigns activeRoute.waypoints. We can't use the
-// array reference itself because worker.postMessage structured-clones the
-// envelope, so the worker sees a fresh array reference every tick even when
-// the route is unchanged.
+// The cache keys on the waypoints array reference. The main thread
+// reassigns `srcPaths['activeRoute'].waypoints` on every route change
+// (`getPaths`, `handleRouteUpdate`, `handleActiveRoute`), and `calcs()`
+// runs in-process now so reference identity survives.
 interface RouteRemainingCache {
-  waypointsVersion: number
+  waypoints: Array<[number, number]>
   pointIndex: number
   reverse: boolean
   totalGc: number
@@ -389,23 +388,14 @@ export function routeRemaining(src: SKPaths, rhumbLine?: boolean): number {
     toIndex = lastIndex
   }
 
-  // The main thread bumps `waypointsVersion` on every (re)assignment of
-  // activeRoute.waypoints. We need a primitive cache key here because the
-  // worker receives a freshly-cloned waypoints array on every postMessage,
-  // so reference equality would never hold across ticks.
-  const waypointsVersion = src['activeRoute'].waypointsVersion
-  const canCache = typeof waypointsVersion === 'number'
-
-  if (canCache) {
-    const cache = routeRemainingCache
-    if (
-      cache &&
-      cache.waypointsVersion === waypointsVersion &&
-      cache.pointIndex === ptIndex &&
-      cache.reverse === reverse
-    ) {
-      return useRhumbLine ? cache.totalRl : cache.totalGc
-    }
+  const cache = routeRemainingCache
+  if (
+    cache &&
+    cache.waypoints === waypoints &&
+    cache.pointIndex === ptIndex &&
+    cache.reverse === reverse
+  ) {
+    return useRhumbLine ? cache.totalRl : cache.totalGc
   }
 
   // Sum segment lengths for both flavours in a single pass. Advance one
@@ -423,14 +413,12 @@ export function routeRemaining(src: SKPaths, rhumbLine?: boolean): number {
     pt = next
   }
 
-  if (canCache) {
-    routeRemainingCache = {
-      waypointsVersion,
-      pointIndex: ptIndex,
-      reverse,
-      totalGc,
-      totalRl
-    }
+  routeRemainingCache = {
+    waypoints,
+    pointIndex: ptIndex,
+    reverse,
+    totalGc,
+    totalRl
   }
   return useRhumbLine ? totalRl : totalGc
 }
