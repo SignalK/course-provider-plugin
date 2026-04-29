@@ -1,54 +1,17 @@
 /*
  * Reusable mock-SignalK harness for bench/run.ts.
  *
- * Mocks the `Worker` class on `worker_threads` BEFORE the plugin is
- * loaded so the plugin's `new Worker(...)` call constructs the mock
- * instead. The dispatcher and helpers (lib/delta-msg, lib/alarms) all
- * run for real; we just don't want the actual worker thread spinning
- * up because (a) it does the geodesy maths off-thread and isn't what
- * the perf PRs target and (b) it makes results noisier.
- *
- * `createHarness()` returns a fresh plugin instance + delta callback +
- * mock worker. Multiple calls in the same process share the singleton
- * mock — that's fine because the plugin re-instantiates the Worker on
- * every start().
+ * Wires up a stub server so the plugin can be `start()`ed in-process,
+ * and returns the captured delta callback so each scenario can drive
+ * deltas through the dispatcher. The plugin runs `calcs()` inline on
+ * the same thread now (no worker thread), so the bench measures the
+ * full per-tick cost: dispatch + parseSKPaths + calcs + buildDeltaMsg.
  */
-
-import workerThreads from 'node:worker_threads'
 
 export type DeltaCallback = (delta: unknown) => void
 
-export class MockWorker {
-  public postedMessages: unknown[] = []
-  private listeners: Record<string, Array<(arg: unknown) => void>> = {}
-
-  constructor(public filename: string) {}
-  on(event: string, handler: (arg: unknown) => void) {
-    this.listeners[event] = this.listeners[event] || []
-    this.listeners[event].push(handler)
-    return this
-  }
-  removeAllListeners() {
-    this.listeners = {}
-    return this
-  }
-  terminate() {
-    return Promise.resolve(0)
-  }
-  postMessage(msg: unknown) {
-    this.postedMessages.push(msg)
-  }
-  unref() {}
-}
-
-// Replace `Worker` on the singleton worker_threads module so any later
-// `import { Worker } from 'worker_threads'` sees the mock. Runs once at
-// import time; safe to call again.
-;(workerThreads as any).Worker = MockWorker
-
 export interface Harness {
   deltaCallback: DeltaCallback
-  worker: MockWorker
   stop: () => void
 }
 
@@ -59,23 +22,21 @@ interface HarnessOptions {
    * only show a delta when debug is off, which is the default.
    */
   debugEnabled?: boolean
+  /**
+   * When true (default), drive a one-shot delta before returning that
+   * populates `nextPoint`, `previousPoint`, COG, SOG, and datetime so
+   * `parseSKPaths(srcPaths)` returns true on every subsequent tick and
+   * `calcs()` runs the full geodesy path. Without this prime the
+   * dispatcher short-circuits to a no-op and the bench measures only
+   * the dispatcher loop overhead.
+   */
+  primeCourse?: boolean
 }
-
-let lastWorker: MockWorker | undefined
-const origCtor = MockWorker
-class TrackingWorker extends origCtor {
-  constructor(filename: string) {
-    super(filename)
-    lastWorker = this
-  }
-}
-;(workerThreads as any).Worker = TrackingWorker
 
 export async function createHarness(
   opts: HarnessOptions = {}
 ): Promise<Harness> {
   const debugEnabled = opts.debugEnabled ?? false
-  lastWorker = undefined
 
   // Drop the cached plugin module so each createHarness() call gets a
   // fresh closure (per-instance state inside src/index.ts mutates
@@ -128,13 +89,33 @@ export async function createHarness(
   if (!deltaCallback) {
     throw new Error('subscribe was not called during plugin.start')
   }
-  if (!lastWorker) {
-    throw new Error('plugin did not construct a Worker')
+  const cb = deltaCallback as DeltaCallback
+
+  if (opts.primeCourse !== false) {
+    cb({
+      updates: [
+        {
+          values: [
+            {
+              path: 'navigation.course.nextPoint',
+              value: { position: { latitude: 50.5, longitude: 8.5 } }
+            },
+            {
+              path: 'navigation.course.previousPoint',
+              value: { position: { latitude: 50.0, longitude: 8.0 } }
+            },
+            { path: 'navigation.magneticVariation', value: 0.05 },
+            { path: 'navigation.courseOverGroundTrue', value: 1.5 },
+            { path: 'navigation.speedOverGround', value: 4.2 },
+            { path: 'navigation.datetime', value: '2026-04-29T00:00:00.000Z' }
+          ]
+        }
+      ]
+    })
   }
 
   return {
-    deltaCallback: deltaCallback as DeltaCallback,
-    worker: lastWorker,
+    deltaCallback: cb,
     stop: () => plugin.stop()
   }
 }

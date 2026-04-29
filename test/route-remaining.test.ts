@@ -54,13 +54,11 @@ function loadRouteRemaining(): (src: any, useRhumbLine: boolean) => number {
 }
 
 // A 4-waypoint route along the equator: 1deg + 1deg + 1deg = 3deg, which
-// the stub maps to 3 * 1000 = 3000 m.
-//
-// `waypointsVersion` is the cache key that survives the structured clone
-// performed by worker.postMessage. The main thread bumps it whenever
-// activeRoute.waypoints is reassigned; tests pass it explicitly to model
-// that behaviour.
-function routeSrc(waypointsVersion: number = 1): Record<string, any> {
+// the stub maps to 3 * 1000 = 3000 m. Each call returns a fresh waypoints
+// array, so the routeRemaining cache (keyed on array reference identity)
+// invalidates between calls unless the same `routeSrc()` return value is
+// reused.
+function routeSrc(): Record<string, any> {
   return {
     activeRoute: {
       waypoints: [
@@ -70,8 +68,7 @@ function routeSrc(waypointsVersion: number = 1): Record<string, any> {
         [3, 0]
       ] as Array<[number, number]>,
       pointIndex: 0,
-      reverse: false,
-      waypointsVersion
+      reverse: false
     }
   }
 }
@@ -130,31 +127,19 @@ describe('routeRemaining cache and cursor reuse', () => {
     expect(callCounts.rhumbDistanceTo).to.equal(3)
   })
 
-  it('invalidates when waypointsVersion bumps (route content changed)', () => {
-    routeRemaining(routeSrc(1), false)
+  it('invalidates when waypoints array reference changes', () => {
+    routeRemaining(routeSrc(), false)
 
-    const replaced = routeSrc(2) // version bumped: route content has changed
+    // routeSrc() returns a fresh waypoints array each call, mirroring
+    // the main thread's `srcPaths['activeRoute'].waypoints = waypoints`
+    // reassignment in handleRouteUpdate / handleActiveRoute.
+    const replaced = routeSrc()
     replaced.activeRoute.waypoints[3] = [4, 0] // total now 4 segments worth
     callCounts.distanceTo = 0
     const total = routeRemaining(replaced, false)
 
     expect(callCounts.distanceTo).to.be.greaterThan(0)
     expect(total).to.equal(4000)
-  })
-
-  it('hits cache after structuredClone (across worker postMessage)', () => {
-    // Models the production flow: main thread builds srcPaths once, posts to
-    // the worker every tick, Node structured-clones the envelope. The cache
-    // must hit on the cloned object as long as waypointsVersion is unchanged.
-    const tick1 = routeSrc(7)
-    const first = routeRemaining(tick1, false)
-
-    const tick2 = structuredClone(tick1)
-    callCounts.distanceTo = 0
-    const second = routeRemaining(tick2, false)
-
-    expect(second).to.equal(first)
-    expect(callCounts.distanceTo).to.equal(0)
   })
 
   it('invalidates when pointIndex advances', () => {
@@ -175,7 +160,7 @@ describe('routeRemaining cache and cursor reuse', () => {
     routeRemaining(src, false)
 
     // Reset counter; flipping `reverse` must force a recompute even though
-    // waypointsVersion / pointIndex are unchanged.
+    // the waypoints array reference and pointIndex are unchanged.
     callCounts.distanceTo = 0
     src.activeRoute.reverse = true
     routeRemaining(src, false)

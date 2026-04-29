@@ -1,54 +1,56 @@
 import { expect } from 'chai'
-import { resetModuleCache, spy } from './helpers'
-
-// Minimal Worker mock so the plugin can start without spawning a real thread.
-// We also capture postMessage calls to assert that a position delta triggers calc().
-const workerInstances: MockWorker[] = []
-
-class MockWorker {
-  public postedMessages: unknown[] = []
-  private listeners: Record<string, Array<(arg: unknown) => void>> = {}
-
-  constructor(public filename: string) {
-    workerInstances.push(this)
-  }
-
-  on(event: string, handler: (arg: unknown) => void) {
-    this.listeners[event] = this.listeners[event] || []
-    this.listeners[event].push(handler)
-    return this
-  }
-
-  removeAllListeners() {
-    this.listeners = {}
-    return this
-  }
-
-  terminate() {
-    return Promise.resolve(0)
-  }
-
-  postMessage(msg: unknown) {
-    this.postedMessages.push(msg)
-  }
-
-  unref() {}
-}
+import { mockModule, resetModuleCache, spy, type Spy } from './helpers'
+import type { CourseData, SKPaths } from '../src/types'
 
 type DeltaCallback = (delta: unknown) => void
+type CalcsSpy = Spy<(src: SKPaths) => CourseData>
 
-function startPluginCapturingDelta(): {
+// Per-test mock-restore latch. Set by startPluginCapturingDelta(),
+// torn down in afterEach so a failed assertion cannot leak the
+// `src/worker/course` stub into a later test file.
+let restoreCourse: (() => void) | null = null
+
+afterEach(() => {
+  if (restoreCourse) {
+    restoreCourse()
+    restoreCourse = null
+  }
+})
+
+interface StartOptions {
+  /**
+   * Custom parseSKPaths implementation (defaults to always-true so calc()
+   * always reaches the calcs branch). Tests of the activeDest flip pass
+   * a programmable returner.
+   */
+  parseSKPaths?: (src: SKPaths) => boolean
+  /**
+   * Custom calcs return value. Defaults to an empty CourseData; tests
+   * that assert on the published delta payload pass a non-trivial
+   * fixture.
+   */
+  calcsReturn?: CourseData
+}
+
+// Stub `calcs`/`parseSKPaths` so the dispatcher can run inline without
+// the real geodesy. The calcs spy doubles as our test-visible snapshot
+// of `srcPaths` at the moment calc() ran (its first argument).
+function startPluginCapturingDelta(opts: StartOptions = {}): {
   stop: () => void
   deltaCallback: DeltaCallback
-  worker: MockWorker
+  calcsSpy: CalcsSpy
   server: any
 } {
-  // Replace Worker on the singleton worker_threads module so the plugin's
-  // `new Worker(...)` call constructs MockWorker instead. Re-applied per
-  // start because sibling test files may have installed their own
-  // MockWorker subclass into the same singleton.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  require('worker_threads').Worker = MockWorker
+  const fixed: CourseData = opts.calcsReturn ?? {
+    gc: {},
+    rl: {},
+    passedPerpendicular: false
+  }
+  const calcsSpy = spy<(src: SKPaths) => CourseData>(() => fixed)
+  restoreCourse = mockModule('../src/worker/course', {
+    calcs: calcsSpy,
+    parseSKPaths: opts.parseSKPaths ?? (() => true)
+  })
   resetModuleCache('../src/index')
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const factory = require('../src/index') as (server: any) => {
@@ -98,19 +100,30 @@ function startPluginCapturingDelta(): {
   return {
     stop: () => plugin.stop(),
     deltaCallback: capturedDeltaCallback as DeltaCallback,
-    worker: workerInstances[workerInstances.length - 1]!,
+    calcsSpy,
     server
   }
 }
 
-describe('delta handler dispatch', () => {
-  beforeEach(() => {
-    workerInstances.length = 0
-  })
+function positionDelta(lat: number, lon: number) {
+  return {
+    updates: [
+      {
+        values: [
+          {
+            path: 'navigation.position',
+            value: { latitude: lat, longitude: lon }
+          }
+        ]
+      }
+    ]
+  }
+}
 
-  // Positive path: a navigation.position delta should trigger the worker calc.
-  it('forwards navigation.position value and triggers worker calc', () => {
-    const { deltaCallback, worker, stop } = startPluginCapturingDelta()
+describe('delta handler dispatch', () => {
+  // Positive path: a navigation.position delta triggers calc().
+  it('forwards navigation.position value and triggers calc', () => {
+    const { deltaCallback, calcsSpy, stop } = startPluginCapturingDelta()
 
     deltaCallback({
       updates: [
@@ -125,9 +138,9 @@ describe('delta handler dispatch', () => {
       ]
     })
 
-    expect(worker.postedMessages.length).to.equal(1)
-    const msg = worker.postedMessages[0] as Record<string, any>
-    expect(msg['navigation.position']).to.deep.equal({
+    expect(calcsSpy.calls.length).to.equal(1)
+    const src = calcsSpy.calls[0]![0] as Record<string, any>
+    expect(src['navigation.position']).to.deep.equal({
       latitude: 10,
       longitude: 20
     })
@@ -137,7 +150,7 @@ describe('delta handler dispatch', () => {
 
   // Non-position paths should be stored but not trigger a calc.
   it('stores non-position paths without triggering calc', () => {
-    const { deltaCallback, worker, stop } = startPluginCapturingDelta()
+    const { deltaCallback, calcsSpy, stop } = startPluginCapturingDelta()
 
     deltaCallback({
       updates: [
@@ -150,7 +163,7 @@ describe('delta handler dispatch', () => {
       ]
     })
 
-    expect(worker.postedMessages.length).to.equal(0)
+    expect(calcsSpy.calls.length).to.equal(0)
     stop()
   })
 
@@ -184,7 +197,7 @@ describe('delta handler dispatch', () => {
 
   // Mixed batch: one update, multiple values of different kinds.
   it('handles a batch with multiple value kinds in one update', () => {
-    const { deltaCallback, worker, stop } = startPluginCapturingDelta()
+    const { deltaCallback, calcsSpy, stop } = startPluginCapturingDelta()
 
     deltaCallback({
       updates: [
@@ -201,37 +214,37 @@ describe('delta handler dispatch', () => {
       ]
     })
 
-    // Exactly one postMessage: the one triggered by navigation.position.
-    expect(worker.postedMessages.length).to.equal(1)
-    const msg = worker.postedMessages[0] as Record<string, any>
+    // Exactly one calc: the one triggered by navigation.position.
+    expect(calcsSpy.calls.length).to.equal(1)
+    const src = calcsSpy.calls[0]![0] as Record<string, any>
     // All three values should be present in srcPaths by the time calc() runs.
-    expect(msg['navigation.speedOverGround']).to.equal(4.2)
-    expect(msg['navigation.position']).to.deep.equal({
+    expect(src['navigation.speedOverGround']).to.equal(4.2)
+    expect(src['navigation.position']).to.deep.equal({
       latitude: 1,
       longitude: 2
     })
-    expect(msg['navigation.headingTrue']).to.equal(1.57)
+    expect(src['navigation.headingTrue']).to.equal(1.57)
     stop()
   })
 
   // Defensive: deltas with no updates or no values should not crash.
   it('tolerates delta with no updates', () => {
-    const { deltaCallback, worker, stop } = startPluginCapturingDelta()
+    const { deltaCallback, calcsSpy, stop } = startPluginCapturingDelta()
     deltaCallback({})
-    expect(worker.postedMessages.length).to.equal(0)
+    expect(calcsSpy.calls.length).to.equal(0)
     stop()
   })
 
   it('tolerates update with no values', () => {
-    const { deltaCallback, worker, stop } = startPluginCapturingDelta()
+    const { deltaCallback, calcsSpy, stop } = startPluginCapturingDelta()
     deltaCallback({ updates: [{}] })
-    expect(worker.postedMessages.length).to.equal(0)
+    expect(calcsSpy.calls.length).to.equal(0)
     stop()
   })
 
   // Boundary: multiple updates in a single delta.
   it('processes multiple updates in a single delta', () => {
-    const { deltaCallback, worker, stop } = startPluginCapturingDelta()
+    const { deltaCallback, calcsSpy, stop } = startPluginCapturingDelta()
 
     deltaCallback({
       updates: [
@@ -249,13 +262,117 @@ describe('delta handler dispatch', () => {
       ]
     })
 
-    expect(worker.postedMessages.length).to.equal(1)
-    const msg = worker.postedMessages[0] as Record<string, any>
-    expect(msg['navigation.speedOverGround']).to.equal(3.1)
-    expect(msg['navigation.position']).to.deep.equal({
+    expect(calcsSpy.calls.length).to.equal(1)
+    const src = calcsSpy.calls[0]![0] as Record<string, any>
+    expect(src['navigation.speedOverGround']).to.equal(3.1)
+    expect(src['navigation.position']).to.deep.equal({
       latitude: 5,
       longitude: 6
     })
+    stop()
+  })
+
+  // Skip the calc entirely when navigation.position is missing — the
+  // dispatcher's first guard. Without this, parseSKPaths would receive
+  // a srcPaths with no position and cascade into the wrong branch.
+  it('skips calc when navigation.position is missing', () => {
+    const { deltaCallback, calcsSpy, server, stop } =
+      startPluginCapturingDelta()
+
+    deltaCallback({
+      updates: [
+        {
+          values: [{ path: 'navigation.speedOverGround', value: 5 }]
+        }
+      ]
+    })
+
+    expect(calcsSpy.calls.length).to.equal(0)
+    expect(server.handleMessage.called).to.equal(false)
+    stop()
+  })
+})
+
+// Pins the activeDest flip — the cleared-state delta has to fire
+// exactly once when the navigation context becomes incomplete after
+// being complete, then stay silent until it becomes complete again.
+// Pre-refactor this lived in the worker module; now it lives in the
+// plugin closure.
+describe('activeDest flip', () => {
+  it('emits one calc, one cleared-state delta, then stays silent on idle ticks', () => {
+    let parseResult = true
+    const calcsReturn: CourseData = {
+      gc: { calcMethod: 'GreatCircle', distance: 1234 },
+      rl: { calcMethod: 'Rhumbline', distance: 1235 },
+      passedPerpendicular: false
+    }
+    const { deltaCallback, calcsSpy, server, stop } = startPluginCapturingDelta(
+      {
+        parseSKPaths: () => parseResult,
+        calcsReturn
+      }
+    )
+
+    // Tick 1: complete context → calcs runs and a calcValues delta fires.
+    deltaCallback(positionDelta(50, 8))
+    expect(calcsSpy.calls.length).to.equal(1)
+    // Two handleMessage calls expected on the very first complete tick:
+    // the calcValues delta and the once-only meta delta.
+    expect(server.handleMessage.calls.length).to.equal(2)
+
+    // Tick 2: context becomes incomplete → exactly one cleared-state
+    // calcValues delta is emitted from the activeDest=true path. No
+    // further calcs() invocation.
+    parseResult = false
+    deltaCallback(positionDelta(50, 8))
+    expect(calcsSpy.calls.length).to.equal(1)
+    expect(server.handleMessage.calls.length).to.equal(3)
+
+    // Tick 3: still incomplete and activeDest is now false → idle. No
+    // new handleMessage call.
+    deltaCallback(positionDelta(50, 8))
+    expect(calcsSpy.calls.length).to.equal(1)
+    expect(server.handleMessage.calls.length).to.equal(3)
+
+    // Tick 4: context complete again → fresh calcs run and one more
+    // calcValues delta. Meta delta is NOT re-emitted (latch).
+    parseResult = true
+    deltaCallback(positionDelta(50, 8))
+    expect(calcsSpy.calls.length).to.equal(2)
+    expect(server.handleMessage.calls.length).to.equal(4)
+
+    stop()
+  })
+
+  it('publishes the buildDeltaMsg payload from the configured method on each calc', () => {
+    const calcsReturn: CourseData = {
+      gc: { calcMethod: 'GreatCircle', distance: 9999 },
+      rl: {},
+      passedPerpendicular: false
+    }
+    const { deltaCallback, server, stop } = startPluginCapturingDelta({
+      calcsReturn
+    })
+
+    deltaCallback(positionDelta(50, 8))
+
+    // The calcValues delta is the first handleMessage call; the meta
+    // delta is the second. Both go through SKVersion.v2.
+    const firstCall = server.handleMessage.calls[0]
+    expect(firstCall).to.exist
+    const [, payload, version] = firstCall!
+    // SKVersion.v2 is exported as the string 'v2' from server-api.
+    expect(version).to.equal('v2')
+    const distanceEntry = (
+      payload as {
+        updates: Array<{ values: Array<{ path: string; value: any }> }>
+      }
+    ).updates[0]!.values.find(
+      (v) => v.path === 'navigation.course.calcValues.distance'
+    )
+    expect(distanceEntry).to.exist
+    expect(distanceEntry!.value).to.equal(9999)
+
     stop()
   })
 })
