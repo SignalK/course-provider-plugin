@@ -1,43 +1,44 @@
 import { expect } from 'chai'
-import { resetModuleCache, spy } from './helpers'
-
-// Mock the worker so the plugin can start; we don't care about calc results here.
-const workerInstances: MockWorker[] = []
-
-class MockWorker {
-  public postedMessages: unknown[] = []
-  private listeners: Record<string, Array<(arg: unknown) => void>> = {}
-
-  constructor(public filename: string) {
-    workerInstances.push(this)
-  }
-  on(event: string, handler: (arg: unknown) => void) {
-    this.listeners[event] = this.listeners[event] || []
-    this.listeners[event].push(handler)
-    return this
-  }
-  removeAllListeners() {
-    this.listeners = {}
-    return this
-  }
-  terminate() {
-    return Promise.resolve(0)
-  }
-  postMessage(msg: unknown) {
-    this.postedMessages.push(msg)
-  }
-  unref() {}
-}
+import { mockModule, resetModuleCache, spy, type Spy } from './helpers'
+import type { CourseData, SKPaths } from '../src/types'
 
 type DeltaCallback = (delta: unknown) => void
+type CalcsSpy = Spy<(src: SKPaths) => CourseData>
 
-function startPlugin(getResourceImpl: (...args: any[]) => Promise<any>) {
-  // Replace Worker on the singleton worker_threads module so the plugin's
-  // `new Worker(...)` call constructs MockWorker instead. Re-applied per
-  // start because sibling test files may have installed their own
-  // MockWorker subclass into the same singleton.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  require('worker_threads').Worker = MockWorker
+interface Started {
+  stop: () => void
+  deltaCallback: DeltaCallback
+  calcsSpy: CalcsSpy
+  server: any
+}
+
+// Per-test mock-restore latch. Set by startPlugin(), torn down in
+// afterEach so a failed assertion cannot leak the
+// `src/worker/course` stub into a later test file.
+let restoreCourse: (() => void) | null = null
+
+afterEach(() => {
+  if (restoreCourse) {
+    restoreCourse()
+    restoreCourse = null
+  }
+})
+
+// Stub `calcs`/`parseSKPaths` so the dispatcher can run without spinning
+// up the real geodesy maths. The calcs spy doubles as our test-visible
+// snapshot of `srcPaths` at the moment calc() ran (its first argument).
+function startPlugin(
+  getResourceImpl: (...args: any[]) => Promise<any>
+): Started {
+  const calcsSpy = spy<(src: SKPaths) => CourseData>(() => ({
+    gc: {},
+    rl: {},
+    passedPerpendicular: false
+  }))
+  restoreCourse = mockModule('../src/worker/course', {
+    calcs: calcsSpy,
+    parseSKPaths: () => true
+  })
   resetModuleCache('../src/index')
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const factory = require('../src/index') as (server: any) => {
@@ -83,18 +84,18 @@ function startPlugin(getResourceImpl: (...args: any[]) => Promise<any>) {
   return {
     stop: () => plugin.stop(),
     deltaCallback: deltaCallback as DeltaCallback,
-    worker: workerInstances[workerInstances.length - 1]!,
+    calcsSpy,
     server
   }
 }
 
-// Drive a navigation.position through the dispatcher so the worker mock
-// receives the current srcPaths snapshot. Returns that snapshot object.
+// Drive a navigation.position through the dispatcher so calc() runs and
+// the calcs spy captures the current srcPaths. Returns that snapshot.
 async function snapshotSrcPaths(
   deltaCallback: DeltaCallback,
-  worker: MockWorker
+  calcsSpy: CalcsSpy
 ): Promise<Record<string, any>> {
-  const before = worker.postedMessages.length
+  const before = calcsSpy.calls.length
   deltaCallback({
     updates: [
       {
@@ -109,16 +110,12 @@ async function snapshotSrcPaths(
   })
   // Give any pending microtasks (from handleActiveRoute awaits) a chance to settle.
   await new Promise((r) => setTimeout(r, 0))
-  const after = worker.postedMessages.length
+  const after = calcsSpy.calls.length
   expect(after).to.be.greaterThan(before)
-  return worker.postedMessages[after - 1] as Record<string, any>
+  return calcsSpy.calls[after - 1]![0] as Record<string, any>
 }
 
 describe('navigation.course.activeRoute dispatch', () => {
-  beforeEach(() => {
-    workerInstances.length = 0
-  })
-
   // Pins the post-handleActiveRoute storage shape so a refactor that drops
   // the `{ ...v.value }` spread still produces an entry containing href and
   // waypoints fetched from resourcesApi.
@@ -128,7 +125,7 @@ describe('navigation.course.activeRoute dispatch', () => {
       [11, 21],
       [12, 22]
     ]
-    const { deltaCallback, worker, server, stop } = startPlugin(async () => ({
+    const { deltaCallback, calcsSpy, server, stop } = startPlugin(async () => ({
       feature: { geometry: { coordinates: waypoints } }
     }))
 
@@ -148,9 +145,8 @@ describe('navigation.course.activeRoute dispatch', () => {
     // Wait for the async getResource in handleActiveRoute to settle.
     await new Promise((r) => setTimeout(r, 0))
 
-    // Now drive a position update so the worker mock receives srcPaths
-    // containing the stored activeRoute.
-    const snapshot = await snapshotSrcPaths(deltaCallback, worker)
+    // Now drive a position update so calcs() captures srcPaths.
+    const snapshot = await snapshotSrcPaths(deltaCallback, calcsSpy)
 
     expect(server.resourcesApi.getResource.calledWith('routes', 'abc123')).to.be
       .true
@@ -165,7 +161,7 @@ describe('navigation.course.activeRoute dispatch', () => {
   })
 
   it('clears activeRoute when delta value is null', async () => {
-    const { deltaCallback, worker, stop } = startPlugin(async () => null)
+    const { deltaCallback, calcsSpy, stop } = startPlugin(async () => null)
 
     deltaCallback({
       updates: [
@@ -176,16 +172,14 @@ describe('navigation.course.activeRoute dispatch', () => {
     })
     await new Promise((r) => setTimeout(r, 0))
 
-    const snapshot = await snapshotSrcPaths(deltaCallback, worker)
+    const snapshot = await snapshotSrcPaths(deltaCallback, calcsSpy)
     expect(snapshot.activeRoute).to.be.null
     stop()
   })
 
   // Regression: out-of-order resolution of getWaypoints() between two
   // route-activation events must not overwrite the newer route with the
-  // older one's late result. Previously every fetch unconditionally
-  // committed, so a slow A followed by a quick B left srcPaths pointing at
-  // B briefly and then A once A finally resolved.
+  // older one's late result.
   it('drops a stale getWaypoints result when a newer route fetch has started', async () => {
     const waypointsA = [
       [10, 20],
@@ -200,7 +194,7 @@ describe('navigation.course.activeRoute dispatch', () => {
     const aPromise = new Promise<any>((r) => {
       resolveA = r
     })
-    const { deltaCallback, worker, stop } = startPlugin(
+    const { deltaCallback, calcsSpy, stop } = startPlugin(
       async (_resType: string, id: string) => {
         if (id === 'route-a') return aPromise
         if (id === 'route-b') {
@@ -243,16 +237,14 @@ describe('navigation.course.activeRoute dispatch', () => {
     resolveA({ feature: { geometry: { coordinates: waypointsA } } })
     await new Promise((r) => setTimeout(r, 0))
 
-    const snapshot = await snapshotSrcPaths(deltaCallback, worker)
+    const snapshot = await snapshotSrcPaths(deltaCallback, calcsSpy)
     expect(snapshot.activeRoute.href).to.equal('/resources/routes/route-b')
     expect(snapshot.activeRoute.waypoints).to.deep.equal(waypointsB)
     stop()
   })
 
   // Regression: switching from one route to another must replace the stored
-  // activeRoute. Previously activeRouteId was only set when unset, and the
-  // `value.href.includes(activeRouteId)` guard rejected any incoming value
-  // whose href did not contain the original route id.
+  // activeRoute, not silently retain the first one.
   it('replaces stored activeRoute when a different route becomes active', async () => {
     const waypointsA = [
       [10, 20],
@@ -263,7 +255,7 @@ describe('navigation.course.activeRoute dispatch', () => {
       [31, 41],
       [32, 42]
     ]
-    const { deltaCallback, worker, server, stop } = startPlugin(
+    const { deltaCallback, calcsSpy, server, stop } = startPlugin(
       async (_resType: string, id: string) => {
         if (id === 'route-a') {
           return { feature: { geometry: { coordinates: waypointsA } } }
@@ -288,7 +280,7 @@ describe('navigation.course.activeRoute dispatch', () => {
       ]
     })
     await new Promise((r) => setTimeout(r, 0))
-    const afterA = await snapshotSrcPaths(deltaCallback, worker)
+    const afterA = await snapshotSrcPaths(deltaCallback, calcsSpy)
     expect(afterA.activeRoute.href).to.equal('/resources/routes/route-a')
     expect(afterA.activeRoute.waypoints).to.deep.equal(waypointsA)
 
@@ -306,7 +298,7 @@ describe('navigation.course.activeRoute dispatch', () => {
       ]
     })
     await new Promise((r) => setTimeout(r, 0))
-    const afterB = await snapshotSrcPaths(deltaCallback, worker)
+    const afterB = await snapshotSrcPaths(deltaCallback, calcsSpy)
 
     expect(afterB.activeRoute.href).to.equal('/resources/routes/route-b')
     expect(afterB.activeRoute.name).to.equal('B')
