@@ -12,6 +12,18 @@ interface Started {
   server: any
 }
 
+// Per-test mock-restore latch. Set by startPlugin(), torn down in
+// afterEach so a failed assertion cannot leak the
+// `src/worker/course` stub into a later test file.
+let restoreCourse: (() => void) | null = null
+
+afterEach(() => {
+  if (restoreCourse) {
+    restoreCourse()
+    restoreCourse = null
+  }
+})
+
 // Stub `calcs`/`parseSKPaths` so the dispatcher can run without spinning
 // up the real geodesy maths. The calcs spy doubles as our test-visible
 // snapshot of `srcPaths` at the moment calc() ran (its first argument).
@@ -23,7 +35,7 @@ function startPlugin(
     rl: {},
     passedPerpendicular: false
   }))
-  const restoreCourse = mockModule('../src/worker/course', {
+  restoreCourse = mockModule('../src/worker/course', {
     calcs: calcsSpy,
     parseSKPaths: () => true
   })
@@ -70,10 +82,7 @@ function startPlugin(
   if (!deltaCallback) throw new Error('subscribe was not called')
 
   return {
-    stop: () => {
-      plugin.stop()
-      restoreCourse()
-    },
+    stop: () => plugin.stop(),
     deltaCallback: deltaCallback as DeltaCallback,
     calcsSpy,
     server

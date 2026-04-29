@@ -164,6 +164,13 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
       server.debug(`Applied config: ${JSON.stringify(config)}`)
 
+      // The previous run may have left these set in the same factory
+      // closure (the worker thread used to be torn down on stop, which
+      // implicitly reset its module-scoped state); restart the cleared-
+      // state and meta latches explicitly now that they live in-process.
+      activeDest = false
+      metaSent = false
+
       // setup subscriptions
       initSubscriptions(SRC_PATHS)
       // setup routes

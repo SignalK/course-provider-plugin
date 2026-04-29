@@ -22,6 +22,15 @@ interface HarnessOptions {
    * only show a delta when debug is off, which is the default.
    */
   debugEnabled?: boolean
+  /**
+   * When true (default), drive a one-shot delta before returning that
+   * populates `nextPoint`, `previousPoint`, COG, SOG, and datetime so
+   * `parseSKPaths(srcPaths)` returns true on every subsequent tick and
+   * `calcs()` runs the full geodesy path. Without this prime the
+   * dispatcher short-circuits to a no-op and the bench measures only
+   * the dispatcher loop overhead.
+   */
+  primeCourse?: boolean
 }
 
 export async function createHarness(
@@ -80,9 +89,33 @@ export async function createHarness(
   if (!deltaCallback) {
     throw new Error('subscribe was not called during plugin.start')
   }
+  const cb = deltaCallback as DeltaCallback
+
+  if (opts.primeCourse !== false) {
+    cb({
+      updates: [
+        {
+          values: [
+            {
+              path: 'navigation.course.nextPoint',
+              value: { position: { latitude: 50.5, longitude: 8.5 } }
+            },
+            {
+              path: 'navigation.course.previousPoint',
+              value: { position: { latitude: 50.0, longitude: 8.0 } }
+            },
+            { path: 'navigation.magneticVariation', value: 0.05 },
+            { path: 'navigation.courseOverGroundTrue', value: 1.5 },
+            { path: 'navigation.speedOverGround', value: 4.2 },
+            { path: 'navigation.datetime', value: '2026-04-29T00:00:00.000Z' }
+          ]
+        }
+      ]
+    })
+  }
 
   return {
-    deltaCallback: deltaCallback as DeltaCallback,
+    deltaCallback: cb,
     stop: () => plugin.stop()
   }
 }
