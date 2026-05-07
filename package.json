@@ -22,7 +22,8 @@
   ],
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=22"
+    "//": "Floor at 20.10 to support Venus CerboGX firmware (currently Node 20.18.2). Bump back to >=22 once Cerbo ships a newer Node.",
+    "node": ">=20.10"
   },
   "files": [
     "plugin",
