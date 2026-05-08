@@ -28,6 +28,19 @@ interface CourseComputerApp extends Application, ServerAPI {
   debug: ((msg: any, ...args: any[]) => void) & { enabled?: boolean }
 }
 
+interface CourseAppConfig {
+  notifications: {
+    enableArrival: boolean
+    enablePerpendicular: boolean
+    sound: boolean
+  }
+  calculations: {
+    method: CalcMethodType
+  }
+}
+
+type CalcMethodType = 'GreatCircle' | 'Rhumbline'
+
 const CONFIG_SCHEMA = {
   properties: {
     notifications: {
@@ -35,9 +48,20 @@ const CONFIG_SCHEMA = {
       title: 'Notifications',
       description: 'Configure the options for generated notifications.',
       properties: {
+        enableArrival: {
+          type: 'boolean',
+          title: 'Enable Arrival Circle Entered',
+          default: true
+        },
+        enablePerpendicular: {
+          type: 'boolean',
+          title: 'Enable Perpendicular Passed',
+          default: true
+        },
         sound: {
           type: 'boolean',
-          title: 'Enable sound'
+          title: 'Enable sound',
+          default: false
         }
       }
     },
@@ -58,6 +82,16 @@ const CONFIG_SCHEMA = {
 
 const CONFIG_UISCHEMA = {
   notifications: {
+    enableArrival: {
+      'ui:widget': 'checkbox',
+      'ui:title': 'Enable Arrival Circle Entered',
+      'ui:help': ''
+    },
+    enablePerpendicular: {
+      'ui:widget': 'checkbox',
+      'ui:title': 'Enable Perpendicular Passed',
+      'ui:help': ''
+    },
     sound: {
       'ui:widget': 'checkbox',
       'ui:title': 'Enable sound',
@@ -130,7 +164,7 @@ module.exports = (server: CourseComputerApp): Plugin => {
     name: 'Course Data provider',
     schema: () => CONFIG_SCHEMA,
     uiSchema: () => CONFIG_UISCHEMA,
-    start: (options: { [key: string]: any }) => {
+    start: (options: CourseAppConfig) => {
       doStartup(options)
     },
     stop: () => {
@@ -139,25 +173,39 @@ module.exports = (server: CourseComputerApp): Plugin => {
   }
   // ************************************
 
-  let config: any = {
-    notifications: {
-      sound: false
-    },
-    calculations: {
-      method: 'GreatCircle'
+  const cleanConfig = (options: CourseAppConfig) => {
+    const defaultConfig = {
+      notifications: {
+        sound: false,
+        enableArrival: false,
+        enablePerpendicular: false
+      },
+      calculations: {
+        method: 'GreatCircle' as CalcMethodType
+      }
     }
+    if (
+      typeof options.notifications?.sound === 'undefined' &&
+      typeof options.calculations?.method === 'undefined'
+    ) {
+      return defaultConfig
+    }
+
+    if (typeof options.notifications?.enableArrival === 'undefined') {
+      options.notifications.enableArrival = true
+    }
+    if (typeof options.notifications?.enablePerpendicular === 'undefined') {
+      options.notifications.enablePerpendicular = true
+    }
+    return options
   }
 
-  const doStartup = (options: any) => {
+  let config: CourseAppConfig
+
+  const doStartup = (options: CourseAppConfig) => {
     try {
       server.debug(`${plugin.name} starting.......`)
-      if (
-        typeof options.notifications?.sound !== 'undefined' &&
-        typeof options.calculations?.method !== 'undefined'
-      ) {
-        config = options
-      }
-
+      config = cleanConfig(options)
       server.debug(`Applied config: ${JSON.stringify(config)}`)
 
       // setup subscriptions
@@ -569,6 +617,11 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   const onArrivalCircleEvent = (event: WatchEvent) => {
     server.debug(JSON.stringify(event))
+
+    if (!config.notifications.enableArrival) {
+      return
+    }
+
     const alarmMethod = config.notifications.sound
       ? [ALARM_METHOD.sound, ALARM_METHOD.visual]
       : [ALARM_METHOD.visual]
@@ -597,6 +650,11 @@ module.exports = (server: CourseComputerApp): Plugin => {
   // ********* Passed Destination events *****************
   const onPassedDestEvent = (event: WatchEvent) => {
     server.debug(JSON.stringify(event))
+
+    if (!config.notifications.enablePerpendicular) {
+      return
+    }
+
     const alarmMethod = config.notifications.sound
       ? [ALARM_METHOD.sound, ALARM_METHOD.visual]
       : [ALARM_METHOD.visual]
