@@ -45,6 +45,42 @@ describe('course calculations defensive guards', () => {
     expect(parseSKPaths(src)).to.equal(false)
   })
 
+  it('parseSKPaths returns true when position and both course points are present', () => {
+    const src = {
+      'navigation.position': { latitude: 0, longitude: 0 },
+      'navigation.course.nextPoint': {
+        position: { latitude: 1, longitude: 2 }
+      },
+      'navigation.course.previousPoint': {
+        position: { latitude: 3, longitude: 4 }
+      }
+    }
+
+    expect(parseSKPaths(src)).to.equal(true)
+  })
+
+  it('parseSKPaths returns false when previousPoint is missing', () => {
+    const src = {
+      'navigation.position': { latitude: 0, longitude: 0 },
+      'navigation.course.nextPoint': {
+        position: { latitude: 1, longitude: 2 }
+      }
+    }
+
+    expect(parseSKPaths(src)).to.equal(false)
+  })
+
+  it('parseSKPaths returns false when nextPoint is missing', () => {
+    const src = {
+      'navigation.position': { latitude: 0, longitude: 0 },
+      'navigation.course.previousPoint': {
+        position: { latitude: 3, longitude: 4 }
+      }
+    }
+
+    expect(parseSKPaths(src)).to.equal(false)
+  })
+
   it('vmg returns null when wind or speed is missing', () => {
     const srcMissingWind = { 'navigation.speedOverGround': 3 }
     const srcMissingSpeed = { 'environment.wind.angleTrueGround': 0.5 }

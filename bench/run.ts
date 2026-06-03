@@ -134,6 +134,21 @@ const scenarios: ScenarioBuilder[] = [
         teardown: () => h.stop()
       }
     }
+  },
+  {
+    name: 'position update with active route',
+    build: async () => {
+      const h = await createHarness({ debugEnabled: false, primeRoute: true })
+      const cb: DeltaCallback = h.deltaCallback
+      let i = 0
+      return {
+        run: () => {
+          i = (i + 1) & 0xffff
+          do_not_optimize(cb(positionDelta(50 + i * 1e-6, 8 + i * 1e-6)))
+        },
+        teardown: () => h.stop()
+      }
+    }
   }
 ]
 

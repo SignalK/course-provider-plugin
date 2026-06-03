@@ -4,11 +4,11 @@ The course-provider plugin computes course values (distance, bearing, ETA, route
 
 Key components:
 
-- **Plugin entrypoint**: `src/index.ts` — wires Signal K delta subscriptions, spawns the calculation worker, publishes deltas back to the server
-- **Worker**: `src/worker/course.ts` — runs in a Node `worker_threads.Worker`; on every position tick computes both `gc` (great-circle) and `rl` (rhumb-line) branches plus `passedPerpendicular`
+- **Plugin entrypoint**: `src/index.ts` — wires Signal K delta subscriptions, runs the course calculations on each tick, publishes deltas back to the server
+- **Calculations**: `src/worker/course.ts` — pure course math; on every position tick computes both `gc` (great-circle) and `rl` (rhumb-line) branches plus `passedPerpendicular`. (The `worker/` directory name is a misnomer — these are plain functions, not a worker thread.)
 - **Geodesy**: `src/lib/geodesy/latlon-spherical.js` — Chris Veness' library, vendored
 - **Delta builder**: `src/lib/delta-msg.ts` — fixed-shape values array for the `calcValues.*` delta
-- **Benchmarks**: `bench/` — tinybench-based dispatch benchmark for A/B-ing perf changes (see `bench/README.md`)
+- **Benchmarks**: `bench/` — mitata-based dispatch benchmark for A/B-ing perf changes (see `bench/README.md`)
 
 ## Code Quality Principles
 
@@ -47,13 +47,13 @@ The plugin runs at 1-2 Hz on every `navigation.position` delta on Raspberry Pi 3
 
 Per `navigation.position` delta:
 
-`src/index.ts` `calc()` → `worker.postMessage(srcPaths)` (structured-cloned) → `src/worker/course.ts` `calcs(src)` → main thread `calcResult(result)` → `src/lib/delta-msg.ts` `buildDeltaMsg(...)` → `server.handleMessage(...)`.
+`src/index.ts` `calc()` → `src/worker/course.ts` `calcs(srcPaths)` → `src/index.ts` `calcResult(result)` → `src/lib/delta-msg.ts` `buildDeltaMsg(...)` → `server.handleMessage(...)`.
 
 Files in scope:
 
 - `src/index.ts` `calc`, `calcResult`, the subscribe callback — per delta
-- `src/worker/course.ts` `calcs`, `routeRemaining`, `trackBearings`, `passedPerpendicular`, `vmc`, `vmg` — per worker tick
-- `src/lib/delta-msg.ts` `buildDeltaMsg` — per worker tick
+- `src/worker/course.ts` `calcs`, `routeRemaining`, `trackBearings`, `passedPerpendicular`, `vmc`, `vmg` — per position tick
+- `src/lib/delta-msg.ts` `buildDeltaMsg` — per position tick
 
 ### Rules
 
@@ -61,14 +61,14 @@ Files in scope:
 - **Build objects in their final shape.** On hot paths, write all properties in a single object literal with consistent key order so V8 keeps a stable hidden class. Do not build up objects incrementally via spread or `Object.assign`. See `buildDeltaMsg` for the fixed-shape pattern.
 - **Minimize per-tick allocations.** Hoist constants to module scope. Reuse cursors instead of allocating two `LatLon` objects per loop iteration (see `routeRemaining`).
 - **Cache values that don't change every tick.** Track bearings (prev → next) depend only on endpoints and `magVar`, not on vessel position. Route-remaining distance depends on waypoints, `pointIndex`, and `reverse`, not on vessel position. See `trackBearingCache` and `routeRemainingCache` in `src/worker/course.ts`.
-- **`worker.postMessage` structured-clones the envelope every tick.** Anything you put on `srcPaths` is cloned per tick — avoid stuffing large arrays in there casually. Caches keyed on array references do not survive the clone; use a primitive version counter bumped by the main thread (see `waypointsVersion`).
+- **`calcs()` receives `srcPaths` by reference.** There is no per-tick structured clone, so caches may key on array references directly — `srcPaths['activeRoute'].waypoints` keeps its identity across ticks until a route change reassigns it (see `routeRemainingCache`).
 - **Use `Date.now()` for arithmetic, `new Date(ms).toISOString()` only for the final ETA string.** Avoid `Date` allocations in the math.
 - **Use `structuredClone`** for deep cloning, not `JSON.parse(JSON.stringify(...))`.
 - **Avoid lodash on hot paths.**
 
 ### Benchmarking
 
-Run the dispatch benchmark with `npm run bench`. See `bench/README.md` for what each column means and what is and isn't covered (the dispatcher and delta-builder are; the geodesy maths in the worker is not, by default). Treat any `Δmean (%)` smaller than `rme(baseline) + rme(candidate)` as noise. Verify on Pi 3-5 hardware before claiming a Pi-relevant speedup.
+Run the dispatch benchmark with `npm run bench`. See `bench/README.md` for what each column means and what is and isn't covered (the dispatcher, delta-builder, and the `calcs()` geodesy are all exercised when the course is primed). Use the JSON capture + compare flow for A/B runs rather than eyeballing a single run. Verify on Pi 3-5 hardware before claiming a Pi-relevant speedup.
 
 ## Git Commit Conventions
 
