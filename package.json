@@ -27,10 +27,19 @@
   },
   "files": [
     "plugin",
+    "logo.svg",
+    "docs/screenshots",
     "README.md",
     "CHANGELOG.md",
     "LICENSE"
   ],
+  "signalk": {
+    "displayName": "Course Provider",
+    "appIcon": "./logo.svg",
+    "screenshots": [
+      "./docs/screenshots/1_config.png"
+    ]
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "clean": "rimraf plugin",
