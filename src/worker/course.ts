@@ -1,21 +1,5 @@
-import { parentPort } from 'worker_threads'
 import { CourseData, SKPaths } from '../types'
 import { LatLonSpherical as LatLon } from '../lib/geodesy/latlon-spherical.js'
-
-let activeDest = false
-
-// process message from main thread
-parentPort?.on('message', (message: SKPaths) => {
-  if (parseSKPaths(message)) {
-    parentPort?.postMessage(calcs(message))
-    activeDest = true
-  } else {
-    if (activeDest) {
-      parentPort?.postMessage({ gc: {}, rl: {} })
-      activeDest = false
-    }
-  }
-})
 
 export function parseSKPaths(src: SKPaths): boolean {
   return src['navigation.position'] &&
@@ -99,6 +83,14 @@ function trackBearings(
   return fresh
 }
 
+// The empty/cleared CourseData shape, published when the navigation
+// context is incomplete (no position/destination, or a just-cleared
+// route) so subscribers see cleared values. passedPerpendicular is a
+// required field on CourseData and must always be present.
+export function emptyCourseData(): CourseData {
+  return { gc: {}, rl: {}, passedPerpendicular: false }
+}
+
 // course calculations
 export function calcs(src: SKPaths): CourseData {
   const vesselPosition = src['navigation.position']
@@ -120,7 +112,7 @@ export function calcs(src: SKPaths): CourseData {
       )
     : null
 
-  const res: CourseData = { gc: {}, rl: {}, passedPerpendicular: false }
+  const res: CourseData = emptyCourseData()
   if (!vesselPosition || !destination || !startPoint) {
     return res
   }
@@ -356,19 +348,27 @@ export function targetSpeed(
 // per tick (gc/rl × timeCalcs/targetSpeed). Both flavours share the same
 // key inputs and are computed together in one cursor pass on miss.
 //
-// The cache is keyed on `waypointsVersion`, a primitive bumped by the main
-// thread whenever it (re)assigns activeRoute.waypoints. We can't use the
-// array reference itself because worker.postMessage structured-clones the
-// envelope, so the worker sees a fresh array reference every tick even when
-// the route is unchanged.
+// The cache keys on the waypoints array reference. `srcPaths` is passed to
+// calcs() by reference, and `srcPaths['activeRoute'].waypoints` is only
+// reassigned on a route change (`getPaths`, `handleRouteUpdate`,
+// `handleActiveRoute`), so the reference stays stable across ticks and the
+// key holds.
 interface RouteRemainingCache {
-  waypointsVersion: number
+  waypoints: Array<[number, number]>
   pointIndex: number
   reverse: boolean
   totalGc: number
   totalRl: number
 }
 let routeRemainingCache: RouteRemainingCache | null = null
+
+// Reset the module-scoped caches. The plugin calls this on startup so a
+// stop/start cycle within the same server process begins from clean
+// state — these caches otherwise outlive a single plugin instance.
+export function resetCaches(): void {
+  trackBearingCache = null
+  routeRemainingCache = null
+}
 
 // total distance in meters of remaining route segments
 export function routeRemaining(src: SKPaths, rhumbLine?: boolean): number {
@@ -405,23 +405,14 @@ export function routeRemaining(src: SKPaths, rhumbLine?: boolean): number {
     toIndex = lastIndex
   }
 
-  // The main thread bumps `waypointsVersion` on every (re)assignment of
-  // activeRoute.waypoints. We need a primitive cache key here because the
-  // worker receives a freshly-cloned waypoints array on every postMessage,
-  // so reference equality would never hold across ticks.
-  const waypointsVersion = src['activeRoute'].waypointsVersion
-  const canCache = typeof waypointsVersion === 'number'
-
-  if (canCache) {
-    const cache = routeRemainingCache
-    if (
-      cache &&
-      cache.waypointsVersion === waypointsVersion &&
-      cache.pointIndex === ptIndex &&
-      cache.reverse === reverse
-    ) {
-      return useRhumbLine ? cache.totalRl : cache.totalGc
-    }
+  const cache = routeRemainingCache
+  if (
+    cache &&
+    cache.waypoints === waypoints &&
+    cache.pointIndex === ptIndex &&
+    cache.reverse === reverse
+  ) {
+    return useRhumbLine ? cache.totalRl : cache.totalGc
   }
 
   // Sum segment lengths for both flavours in a single pass. Advance one
@@ -439,14 +430,12 @@ export function routeRemaining(src: SKPaths, rhumbLine?: boolean): number {
     pt = next
   }
 
-  if (canCache) {
-    routeRemainingCache = {
-      waypointsVersion,
-      pointIndex: ptIndex,
-      reverse,
-      totalGc,
-      totalRl
-    }
+  routeRemainingCache = {
+    waypoints,
+    pointIndex: ptIndex,
+    reverse,
+    totalGc,
+    totalRl
   }
   return useRhumbLine ? totalRl : totalGc
 }

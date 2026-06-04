@@ -17,9 +17,15 @@ import { Application, Request, Response } from 'express'
 import { NotificationMgr, Watcher, WatchEvent } from './lib/alarms'
 import { buildDeltaMsg, CalcMethod } from './lib/delta-msg'
 import { CourseData, SKPaths } from './types'
+// Course-calculation helpers. (The './worker/' path is a misnomer — these
+// are plain functions, not a worker thread.)
+import {
+  calcs,
+  emptyCourseData,
+  parseSKPaths,
+  resetCaches
+} from './worker/course'
 
-import path from 'path'
-import { Worker } from 'worker_threads'
 import { Subscription } from 'rxjs'
 
 interface CourseComputerApp extends Application, ServerAPI {
@@ -135,7 +141,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
   watchPassedDest.rangeMax = 2
   let unsubscribes: any[] = [] // delta stream subscriptions
   let obs: any[] = [] // Observables subscription
-  let worker: Worker | null = null
 
   const SIGNALK_API_PATH = `/signalk/v2/api`
   const COURSE_CALCS_PATH = `${SIGNALK_API_PATH}/vessels/self/navigation/course/calcValues`
@@ -144,17 +149,17 @@ module.exports = (server: CourseComputerApp): Plugin => {
   let courseCalcs: CourseData
   let activeRouteId: string | undefined
 
-  // Monotonic counter bumped whenever activeRoute.waypoints is (re)assigned.
-  // The worker keys its routeRemaining cache on this number so the cache
-  // survives the structured clone that worker.postMessage performs on every
-  // tick — array references would not.
-  let waypointsVersion = 0
-
   // Monotonic token bumped before every getWaypoints() fetch and on
   // activeRoute clear. The handler that initiated a fetch only commits its
   // result if its token is still the latest one, so concurrent or
   // out-of-order fetches cannot let an older resource overwrite a newer one.
   let routeFetchToken = 0
+
+  // Tracks whether the previous tick had a complete navigation context
+  // (position + nextPoint + previousPoint). When the context becomes
+  // incomplete (e.g., user clears the active route) we emit an empty
+  // result delta exactly once so subscribers see the cleared state.
+  let activeDest = false
 
   let metaSent = false
 
@@ -206,12 +211,21 @@ module.exports = (server: CourseComputerApp): Plugin => {
     try {
       server.debug(`${plugin.name} starting.......`)
       config = cleanConfig(options)
-      server.debug(`Applied config: ${JSON.stringify(config)}`)
+      if (server.debug.enabled) {
+        server.debug(`Applied config: ${JSON.stringify(config)}`)
+      }
+
+      // activeDest, metaSent, and the course module's bearing/route
+      // caches live beyond a single plugin instance (closure and module
+      // scope) and survive a stop/start cycle within the same server
+      // process. Reset them on each start so a restart cannot inherit the
+      // previous run's latched state or a stale cached calculation.
+      activeDest = false
+      metaSent = false
+      resetCaches()
 
       // setup subscriptions
       initSubscriptions(SRC_PATHS)
-      // setup worker(s)
-      initWorkers()
       // setup routes
       initEndpoints()
 
@@ -234,12 +248,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
     unsubscribes = []
     obs.forEach((o: Subscription) => o.unsubscribe())
     obs = []
-    if (worker) {
-      server.debug('** Stopping Worker(s) **')
-      worker.removeAllListeners()
-      worker.terminate()
-      worker = null
-    }
     const msg = 'Stopped'
     server.setPluginStatus(msg)
   }
@@ -281,9 +289,11 @@ module.exports = (server: CourseComputerApp): Plugin => {
             const v: any = values[j]
             const p = v.path
             if (p === PATH_POSITION) {
-              server.debug(
-                `navigation.position ${JSON.stringify(v.value)} => calc()`
-              )
+              if (server.debug.enabled) {
+                server.debug(
+                  `navigation.position ${JSON.stringify(v.value)} => calc()`
+                )
+              }
               srcPaths[p] = v.value
               calc()
             } else if (p === PATH_ACTIVE_ROUTE) {
@@ -308,22 +318,6 @@ module.exports = (server: CourseComputerApp): Plugin => {
         onPassedDestEvent(event)
       })
     )
-  }
-
-  // initialise calculation worker(s)
-  const initWorkers = () => {
-    server.debug('Initialising worker thread....')
-    worker = new Worker(path.resolve(__dirname, './worker/course.js'))
-    worker.on('message', (msg) => {
-      calcResult(msg)
-    })
-    worker.on('error', (error) => console.error('** worker.error:', error))
-    worker.on('exit', (code) => {
-      if (code !== 0) {
-        console.error('** worker.exit:', `Stopped with exit code ${code}`)
-      }
-    })
-    worker.unref()
   }
 
   // initialise api endpoints
@@ -358,7 +352,9 @@ module.exports = (server: CourseComputerApp): Plugin => {
       srcPaths[path] = v?.value ?? null
     })
     const ci = await server.getCourse()
-    server.debug(`*** getPaths() ${JSON.stringify(ci)}`)
+    if (server.debug.enabled) {
+      server.debug(`*** getPaths() ${JSON.stringify(ci)}`)
+    }
     if (ci) {
       srcPaths['navigation.course.nextPoint'] = ci.nextPoint
       srcPaths['navigation.course.previousPoint'] = ci.previousPoint
@@ -376,23 +372,28 @@ module.exports = (server: CourseComputerApp): Plugin => {
           return
         }
         srcPaths['activeRoute'].waypoints = waypoints
-        srcPaths['activeRoute'].waypointsVersion = ++waypointsVersion
       }
     }
-    server.debug(`[srcPaths]: ${JSON.stringify(srcPaths)}`)
+    if (server.debug.enabled) {
+      server.debug(`[srcPaths]: ${JSON.stringify(srcPaths)}`)
+    }
   }
 
   // retrieve waypoints for supplied route id
   const getWaypoints = async (id: string): Promise<GeoJsonLinestring> => {
     const rte = (await server.resourcesApi.getResource('routes', id)) as Route
     const waypoints = rte ? rte.feature.geometry.coordinates : []
-    server.debug(`*** activeRoute waypoints *** ${waypoints}`)
+    if (server.debug.enabled) {
+      server.debug(`*** activeRoute waypoints *** ${waypoints}`)
+    }
     return waypoints
   }
 
   // resources.routes delta handler
   const handleRouteUpdate = async (msg: PathValue) => {
-    server.debug(`*** handleRouteUpdate *** ${JSON.stringify(msg)}`)
+    if (server.debug.enabled) {
+      server.debug(`*** handleRouteUpdate *** ${JSON.stringify(msg)}`)
+    }
     if (msg.path.endsWith(activeRouteId as string)) {
       server.debug(`*** matched activeRouteId *** ${activeRouteId}`)
       const myToken = ++routeFetchToken
@@ -403,13 +404,14 @@ module.exports = (server: CourseComputerApp): Plugin => {
         return
       }
       srcPaths['activeRoute'].waypoints = waypoints
-      srcPaths['activeRoute'].waypointsVersion = ++waypointsVersion
     }
   }
 
   // 'navigation.course.activeRoute' delta handler
   const handleActiveRoute = async (value: any) => {
-    server.debug(`*** handleActiveRoute *** ${JSON.stringify(value)}`)
+    if (server.debug.enabled) {
+      server.debug(`*** handleActiveRoute *** ${JSON.stringify(value)}`)
+    }
 
     if (!value) {
       // Bump the token so any in-flight fetch from a previous activation is
@@ -430,12 +432,13 @@ module.exports = (server: CourseComputerApp): Plugin => {
       return
     }
     srcPaths['activeRoute'] = Object.assign({}, value, {
-      waypoints: waypoints,
-      waypointsVersion: ++waypointsVersion
+      waypoints: waypoints
     })
-    server.debug(
-      `*** activeRoute *** ${JSON.stringify(srcPaths['activeRoute'])}`
-    )
+    if (server.debug.enabled) {
+      server.debug(
+        `*** activeRoute *** ${JSON.stringify(srcPaths['activeRoute'])}`
+      )
+    }
   }
 
   // trigger course calculations
@@ -447,18 +450,35 @@ module.exports = (server: CourseComputerApp): Plugin => {
         )}`
       )
     }
-    if (srcPaths['navigation.position']) {
-      if (server.debug.enabled) {
-        server.debug(JSON.stringify(srcPaths))
-      }
-      worker?.postMessage(srcPaths)
-    } else {
+    if (!srcPaths['navigation.position']) {
       server.debug('No vessel position.....Skipping calc()')
+      return
+    }
+    if (server.debug.enabled) {
+      server.debug(JSON.stringify(srcPaths))
+    }
+    // srcPaths carries unvalidated delta values straight from the bus, so a
+    // malformed coordinate makes the geodesy constructor throw. Contain it
+    // so one bad delta is logged and the stream recovers on the next good
+    // tick, instead of the throw escaping into the subscription dispatch.
+    try {
+      if (parseSKPaths(srcPaths)) {
+        calcResult(calcs(srcPaths))
+        activeDest = true
+      } else if (activeDest) {
+        // The previous tick had a complete context but this one does not
+        // (e.g., the active route was just cleared). Emit an empty result
+        // exactly once so subscribers see the cleared values.
+        calcResult(emptyCourseData())
+        activeDest = false
+      }
+    } catch (error) {
+      server.error(`** calc() failed: ${(error as Error).message} **`)
     }
   }
 
   // send calculation results delta
-  const calcResult = async (result: CourseData) => {
+  const calcResult = (result: CourseData) => {
     server.debug(`*** calculation result ***`)
     if (server.debug.enabled) {
       server.debug(JSON.stringify(result))
@@ -616,7 +636,9 @@ module.exports = (server: CourseComputerApp): Plugin => {
   // ********* Arrival circle events *****************
 
   const onArrivalCircleEvent = (event: WatchEvent) => {
-    server.debug(JSON.stringify(event))
+    if (server.debug.enabled) {
+      server.debug(JSON.stringify(event))
+    }
 
     if (!config.notifications.enableArrival) {
       return
@@ -649,7 +671,9 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   // ********* Passed Destination events *****************
   const onPassedDestEvent = (event: WatchEvent) => {
-    server.debug(JSON.stringify(event))
+    if (server.debug.enabled) {
+      server.debug(JSON.stringify(event))
+    }
 
     if (!config.notifications.enablePerpendicular) {
       return
@@ -681,7 +705,9 @@ module.exports = (server: CourseComputerApp): Plugin => {
 
   // send notification delta message
   const emitNotification = (notification: NotificationMgr) => {
-    server.debug(JSON.stringify(notification?.message))
+    if (server.debug.enabled) {
+      server.debug(JSON.stringify(notification?.message))
+    }
     server.handleMessage(plugin.id, {
       updates: [{ values: [notification.message] }]
     })
