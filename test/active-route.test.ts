@@ -14,7 +14,7 @@ interface Started {
 
 // Per-test mock-restore latch. Set by startPlugin(), torn down in
 // afterEach so a failed assertion cannot leak the
-// `src/worker/course` stub into a later test file.
+// `src/lib/course` stub into a later test file.
 let restoreCourse: (() => void) | null = null
 
 afterEach(() => {
@@ -35,7 +35,7 @@ function startPlugin(
     rl: {},
     passedPerpendicular: false
   }))
-  restoreCourse = mockModule('../src/worker/course', {
+  restoreCourse = mockModule('../src/lib/course', {
     calcs: calcsSpy,
     parseSKPaths: () => true,
     emptyCourseData: () => ({ gc: {}, rl: {}, passedPerpendicular: false }),

@@ -20,11 +20,6 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
 
-    // The vendored geodesy code under src/lib/geodesy/ is JavaScript;
-    // the rest is TypeScript. allowJs lets the .js files participate in
-    // type-checking via JSDoc + structural inference.
-    "allowJs": true,
-
     "types": ["node", "mocha"],
 
     "declaration": true,

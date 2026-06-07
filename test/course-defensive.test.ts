@@ -1,19 +1,12 @@
 import { expect } from 'chai'
 import { resetModuleCache } from './helpers'
 
-// Stub the vendored geodesy class so the worker module loads without
-// pulling in heavy trigonometry. The defensive paths exercised below
-// never actually invoke LatLonSpherical methods.
-/*mockModule('../src/lib/geodesy/latlon-spherical.js', {
-  LatLonSpherical: class {}
-})*/
-
-// Force-reload the worker module so it picks up the mocked geodesy
-// dependency (the require cache may already hold a real-loaded copy
-// from earlier in the suite).
-resetModuleCache('../src/worker/course')
+// Force-reload the course module so this suite gets a fresh closure; the
+// require cache may already hold a copy loaded (and mocked) by an earlier
+// suite.
+resetModuleCache('../src/lib/course')
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const courseModule = require('../src/worker/course') as {
+const courseModule = require('../src/lib/course') as {
   parseSKPaths: (src: any) => boolean
   vmg: (src: any) => number | null
   vmc: (src: any, brg: number) => number | null
