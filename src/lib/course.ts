@@ -188,22 +188,23 @@ export function timeCalcs(
   vmc: number,
   rhumbLine: boolean
 ): CourseTimes {
-  const isRoute =
-    Array.isArray(src['activeRoute']?.waypoints) &&
-    src['activeRoute']?.waypoints.length !== 0
-
   const result: CourseTimes = {
     nextPoint: { ttg: null, eta: null },
     route: { ttg: null, eta: null, dtg: null }
   }
 
-  if (
-    typeof distance !== 'number' ||
-    !Number.isFinite(distance) ||
-    typeof vmc !== 'number' ||
-    !Number.isFinite(vmc) ||
-    vmc <= 0
-  ) {
+  if (typeof distance !== 'number' || !Number.isFinite(distance)) {
+    return result
+  }
+
+  // routeRemaining() is 0 without an active multi-waypoint route, so this
+  // degrades to the next-point distance for an ad-hoc (single-point)
+  // destination: route.* is meaningful whenever a destination exists at
+  // all, not only when a Route resource has been activated.
+  const routeDistance = distance + routeRemaining(src, rhumbLine)
+  result.route.dtg = routeDistance
+
+  if (typeof vmc !== 'number' || !Number.isFinite(vmc) || vmc <= 0) {
     return result
   }
 
@@ -217,14 +218,10 @@ export function timeCalcs(
   result.nextPoint.ttg = nextTtgMsec / 1000
   result.nextPoint.eta = new Date(nextEtaMsec).toISOString()
 
-  if (isRoute) {
-    const rteDistance = distance + routeRemaining(src, rhumbLine)
-    const routeTtgMsec = Math.floor((rteDistance / vmc) * 1000)
-    const routeEtaMsec = dateMsec + routeTtgMsec
-    result.route.ttg = routeTtgMsec / 1000
-    result.route.eta = new Date(routeEtaMsec).toISOString()
-    result.route.dtg = rteDistance
-  }
+  const routeTtgMsec = Math.floor((routeDistance / vmc) * 1000)
+  const routeEtaMsec = dateMsec + routeTtgMsec
+  result.route.ttg = routeTtgMsec / 1000
+  result.route.eta = new Date(routeEtaMsec).toISOString()
   return result
 }
 
