@@ -197,13 +197,20 @@ export function timeCalcs(
     route: { ttg: null, eta: null, dtg: null }
   }
 
-  if (
-    typeof distance !== 'number' ||
-    !Number.isFinite(distance) ||
-    typeof vmc !== 'number' ||
-    !Number.isFinite(vmc) ||
-    vmc <= 0
-  ) {
+  if (typeof distance !== 'number' || !Number.isFinite(distance)) {
+    return result
+  }
+
+  // Route-remaining distance is pure geometry, independent of velocity: it
+  // must not blink to null just because the vessel isn't currently closing
+  // on the next waypoint (e.g. right after rounding a mark, or while
+  // tacking upwind — both routine sail-trim states with vmc <= 0).
+  const routeDistance = isRoute
+    ? distance + routeRemaining(src, rhumbLine)
+    : null
+  result.route.dtg = routeDistance
+
+  if (typeof vmc !== 'number' || !Number.isFinite(vmc) || vmc <= 0) {
     return result
   }
 
@@ -217,13 +224,11 @@ export function timeCalcs(
   result.nextPoint.ttg = nextTtgMsec / 1000
   result.nextPoint.eta = new Date(nextEtaMsec).toISOString()
 
-  if (isRoute) {
-    const rteDistance = distance + routeRemaining(src, rhumbLine)
-    const routeTtgMsec = Math.floor((rteDistance / vmc) * 1000)
+  if (routeDistance !== null) {
+    const routeTtgMsec = Math.floor((routeDistance / vmc) * 1000)
     const routeEtaMsec = dateMsec + routeTtgMsec
     result.route.ttg = routeTtgMsec / 1000
     result.route.eta = new Date(routeEtaMsec).toISOString()
-    result.route.dtg = rteDistance
   }
   return result
 }

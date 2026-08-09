@@ -17,7 +17,7 @@ const courseModule = require('../src/lib/course') as {
     passedPerp: boolean
   ) => {
     nextPoint: { ttg: number | null; eta: string | null }
-    route: { ttg: number | null; eta: string | null }
+    route: { ttg: number | null; eta: string | null; dtg: number | null }
   }
   targetSpeed: (src: any, distance: number) => number | null
 }
@@ -108,6 +108,33 @@ describe('course calculations defensive guards', () => {
 
     expect(result.nextPoint.ttg).to.be.null
     expect(result.nextPoint.eta).to.be.null
+  })
+
+  it('timeCalcs still reports route.dtg when vmc is non-positive (DTG is pure geometry)', () => {
+    // The vessel has just rounded a mark: vmc is momentarily negative, but
+    // the remaining route distance has not changed and must still be
+    // reported. TTG/ETA remain null — they are undefined without a
+    // positive closing speed.
+    const src = {
+      'navigation.datetime': '2020-01-01T00:00:00.000Z',
+      activeRoute: {
+        waypoints: [
+          [0, 0],
+          [1, 0],
+          [2, 0]
+        ],
+        pointIndex: 0,
+        reverse: false
+      }
+    }
+    const result = timeCalcs(src, 500, -1, false)
+
+    expect(result.nextPoint.ttg).to.be.null
+    expect(result.nextPoint.eta).to.be.null
+    expect(result.route.ttg).to.be.null
+    expect(result.route.eta).to.be.null
+    expect(result.route.dtg).to.be.a('number')
+    expect(result.route.dtg).to.be.greaterThan(500)
   })
 
   it('targetSpeed returns null for invalid targetArrivalTime', () => {
