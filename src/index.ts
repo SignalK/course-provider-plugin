@@ -22,11 +22,7 @@ import { calcs, emptyCourseData, parseSKPaths, resetCaches } from './lib/course'
 
 import { Subscription } from 'rxjs'
 
-interface CourseComputerApp extends Application, ServerAPI {
-  // `debug` at runtime is the `debug` npm module instance; its `enabled`
-  // flag is toggled live by the SignalK Admin UI.
-  debug: ((msg: any, ...args: any[]) => void) & { enabled?: boolean }
-}
+type CourseComputerApp = Application & ServerAPI
 
 interface CourseAppConfig {
   notifications: {
