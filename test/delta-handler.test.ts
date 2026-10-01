@@ -35,6 +35,11 @@ interface StartOptions {
    * fault-isolation test to make calcs() throw on demand.
    */
   calcsImpl?: (src: SKPaths) => CourseData
+  /**
+   * The plugin config passed to start(). Defaults to a saved config;
+   * `{}` is what a server passes before the settings were ever saved.
+   */
+  startArgs?: Record<string, unknown>
 }
 
 // Stub `calcs`/`parseSKPaths` so the dispatcher can run inline without
@@ -97,7 +102,7 @@ function startPluginCapturingDelta(opts: StartOptions = {}): {
     }
   }
 
-  const startArgs = {
+  const startArgs = opts.startArgs ?? {
     notifications: { sound: false },
     calculations: { method: 'GreatCircle' }
   }
@@ -464,5 +469,67 @@ describe('doStartup latch reset', () => {
     expect(server.handleMessage.calls.length).to.equal(4)
 
     stop()
+  })
+})
+
+describe('notification settings', () => {
+  const ARRIVAL = 'notifications.navigation.course.arrivalCircleEntered'
+  const PERPENDICULAR = 'notifications.navigation.course.perpendicularPassed'
+
+  // Arrive 20 m from the next point, inside a 50 m arrival circle, past its
+  // perpendicular.
+  const arrive = (startArgs: Record<string, unknown>) => {
+    const started = startPluginCapturingDelta({
+      startArgs,
+      calcsReturn: {
+        gc: { distance: 20 },
+        rl: {},
+        passedPerpendicular: true
+      } as CourseData
+    })
+    started.deltaCallback({
+      updates: [
+        {
+          values: [
+            { path: 'navigation.course.arrivalCircle', value: 50 },
+            {
+              path: 'navigation.position',
+              value: { latitude: 10, longitude: 20 }
+            }
+          ]
+        }
+      ]
+    })
+    const raised = started.server.handleMessage.calls
+      .flatMap((call: any[]) => call[1]?.updates ?? [])
+      .flatMap((u: any) => u.values ?? [])
+      .filter((v: any) => v.path?.startsWith('notifications.') && v.value)
+      .map((v: any) => v.path)
+    started.stop()
+    return raised
+  }
+
+  it('raises both notifications before the settings were ever saved', () => {
+    expect(arrive({})).to.have.members([ARRIVAL, PERPENDICULAR])
+  })
+
+  it('raises both notifications for a config saved without them', () => {
+    expect(arrive({ calculations: { method: 'Rhumbline' } })).to.have.members([
+      ARRIVAL,
+      PERPENDICULAR
+    ])
+  })
+
+  it('raises only the notifications left enabled', () => {
+    expect(
+      arrive({
+        notifications: {
+          enableArrival: false,
+          enablePerpendicular: true,
+          sound: false
+        },
+        calculations: { method: 'GreatCircle' }
+      })
+    ).to.deep.equal([PERPENDICULAR])
   })
 })

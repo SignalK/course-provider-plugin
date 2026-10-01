@@ -41,6 +41,18 @@ interface CourseAppConfig {
 
 type CalcMethodType = 'GreatCircle' | 'Rhumbline'
 
+/** Settings used where the saved config has none, as on a new server. */
+const DEFAULT_CONFIG: CourseAppConfig = {
+  notifications: {
+    enableArrival: true,
+    enablePerpendicular: true,
+    sound: false
+  },
+  calculations: {
+    method: 'GreatCircle'
+  }
+}
+
 const CONFIG_SCHEMA = {
   properties: {
     notifications: {
@@ -51,17 +63,17 @@ const CONFIG_SCHEMA = {
         enableArrival: {
           type: 'boolean',
           title: 'Enable Arrival Circle Entered',
-          default: true
+          default: DEFAULT_CONFIG.notifications.enableArrival
         },
         enablePerpendicular: {
           type: 'boolean',
           title: 'Enable Perpendicular Passed',
-          default: true
+          default: DEFAULT_CONFIG.notifications.enablePerpendicular
         },
         sound: {
           type: 'boolean',
           title: 'Enable sound',
-          default: false
+          default: DEFAULT_CONFIG.notifications.sound
         }
       }
     },
@@ -72,7 +84,7 @@ const CONFIG_SCHEMA = {
       properties: {
         method: {
           type: 'string',
-          default: 'GreatCircle',
+          default: DEFAULT_CONFIG.calculations.method,
           enum: ['GreatCircle', 'Rhumbline']
         }
       }
@@ -172,32 +184,20 @@ module.exports = (server: CourseComputerApp): Plugin => {
   }
   // ************************************
 
-  const cleanConfig = (options: CourseAppConfig) => {
-    const defaultConfig = {
-      notifications: {
-        sound: false,
-        enableArrival: false,
-        enablePerpendicular: false
-      },
-      calculations: {
-        method: 'GreatCircle' as CalcMethodType
-      }
+  /**
+   * The saved config is empty until the plugin's settings are first saved,
+   * and may lack settings added since; those take their defaults.
+   */
+  const cleanConfig = (options: Partial<CourseAppConfig>): CourseAppConfig => ({
+    notifications: {
+      ...DEFAULT_CONFIG.notifications,
+      ...options.notifications
+    },
+    calculations: {
+      ...DEFAULT_CONFIG.calculations,
+      ...options.calculations
     }
-    if (
-      typeof options.notifications?.sound === 'undefined' &&
-      typeof options.calculations?.method === 'undefined'
-    ) {
-      return defaultConfig
-    }
-
-    if (typeof options.notifications?.enableArrival === 'undefined') {
-      options.notifications.enableArrival = true
-    }
-    if (typeof options.notifications?.enablePerpendicular === 'undefined') {
-      options.notifications.enablePerpendicular = true
-    }
-    return options
-  }
+  })
 
   let config: CourseAppConfig
 
