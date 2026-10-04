@@ -151,15 +151,42 @@ describe('timeCalcs / targetSpeed positive paths', () => {
   // Pins the arithmetic so the Date-allocation refactor can't change
   // observable outputs (TTG seconds, ETA ISO string, targetSpeed).
 
-  it('timeCalcs derives TTG and ETA from an ISO datetime', () => {
-    // 1000 m at 10 m/s = 100 s -> ETA = base + 100 s
+  it('timeCalcs derives TTG and ETA from an ISO datetime, mirrored onto route.* without an active route', () => {
+    // 1000 m at 10 m/s = 100 s -> ETA = base + 100 s. No activeRoute is set,
+    // so this is an ad-hoc (single-point) destination: route.* must still
+    // populate, mirroring nextPoint, since routeRemaining() is 0.
     const src = { 'navigation.datetime': '2020-01-01T00:00:00.000Z' }
     const result = timeCalcs(src, 1000, 10, false)
 
     expect(result.nextPoint.ttg).to.equal(100)
     expect(result.nextPoint.eta).to.equal('2020-01-01T00:01:40.000Z')
-    expect(result.route.ttg).to.be.null
-    expect(result.route.eta).to.be.null
+    expect(result.route.ttg).to.equal(100)
+    expect(result.route.eta).to.equal('2020-01-01T00:01:40.000Z')
+  })
+
+  it('timeCalcs adds remaining route segments on top of nextPoint distance for a real route', () => {
+    // nextPoint leg: 1000 m at 10 m/s = 100 s. Route continues for two more
+    // 1-degree-of-longitude-on-the-equator legs (~111,195 m each via
+    // routeRemaining's great-circle math), so route.dtg/ttg must exceed
+    // nextPoint's, not just mirror it as in the ad-hoc case above.
+    const src = {
+      'navigation.datetime': '2020-01-01T00:00:00.000Z',
+      activeRoute: {
+        waypoints: [
+          [0, 0],
+          [1, 0],
+          [2, 0]
+        ],
+        pointIndex: 0,
+        reverse: false
+      }
+    }
+    const result = timeCalcs(src, 1000, 10, false)
+
+    expect(result.nextPoint.ttg).to.equal(100)
+    expect(result.route.ttg).to.be.a('number')
+    expect(result.route.ttg as number).to.be.greaterThan(100)
+    expect(result.route.eta).to.not.equal(result.nextPoint.eta)
   })
 
   it('timeCalcs accepts numeric epoch-ms datetime (legacy tolerance)', () => {

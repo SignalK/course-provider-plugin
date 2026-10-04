@@ -188,10 +188,6 @@ export function timeCalcs(
   vmc: number,
   rhumbLine: boolean
 ): CourseTimes {
-  const isRoute =
-    Array.isArray(src['activeRoute']?.waypoints) &&
-    src['activeRoute']?.waypoints.length !== 0
-
   const result: CourseTimes = {
     nextPoint: { ttg: null, eta: null },
     route: { ttg: null, eta: null, dtg: null }
@@ -201,13 +197,11 @@ export function timeCalcs(
     return result
   }
 
-  // Route-remaining distance is pure geometry, independent of velocity: it
-  // must not blink to null just because the vessel isn't currently closing
-  // on the next waypoint (e.g. right after rounding a mark, or while
-  // tacking upwind — both routine sail-trim states with vmc <= 0).
-  const routeDistance = isRoute
-    ? distance + routeRemaining(src, rhumbLine)
-    : null
+  // routeRemaining() is 0 without an active multi-waypoint route, so this
+  // degrades to the next-point distance for an ad-hoc (single-point)
+  // destination: route.* is meaningful whenever a destination exists at
+  // all, not only when a Route resource has been activated.
+  const routeDistance = distance + routeRemaining(src, rhumbLine)
   result.route.dtg = routeDistance
 
   if (typeof vmc !== 'number' || !Number.isFinite(vmc) || vmc <= 0) {
@@ -224,12 +218,10 @@ export function timeCalcs(
   result.nextPoint.ttg = nextTtgMsec / 1000
   result.nextPoint.eta = new Date(nextEtaMsec).toISOString()
 
-  if (routeDistance !== null) {
-    const routeTtgMsec = Math.floor((routeDistance / vmc) * 1000)
-    const routeEtaMsec = dateMsec + routeTtgMsec
-    result.route.ttg = routeTtgMsec / 1000
-    result.route.eta = new Date(routeEtaMsec).toISOString()
-  }
+  const routeTtgMsec = Math.floor((routeDistance / vmc) * 1000)
+  const routeEtaMsec = dateMsec + routeTtgMsec
+  result.route.ttg = routeTtgMsec / 1000
+  result.route.eta = new Date(routeEtaMsec).toISOString()
   return result
 }
 
