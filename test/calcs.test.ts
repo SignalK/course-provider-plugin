@@ -61,13 +61,13 @@ describe('calcs() geometry-to-CourseData wiring', () => {
 
   it('applies magnetic variation to every bearing via the compass wrap', () => {
     expect(res.gc.bearingTrackMagnetic).to.equal(
-      wrap2Pi(g.trackBearingGcRad + magVar)
+      wrap2Pi(g.trackBearingGcRad - magVar)
     )
-    expect(res.gc.bearingMagnetic).to.equal(wrap2Pi(g.bearingGcRad + magVar))
+    expect(res.gc.bearingMagnetic).to.equal(wrap2Pi(g.bearingGcRad - magVar))
     expect(res.rl.bearingTrackMagnetic).to.equal(
-      wrap2Pi(g.trackBearingRlRad + magVar)
+      wrap2Pi(g.trackBearingRlRad - magVar)
     )
-    expect(res.rl.bearingMagnetic).to.equal(wrap2Pi(g.bearingRlRad + magVar))
+    expect(res.rl.bearingMagnetic).to.equal(wrap2Pi(g.bearingRlRad - magVar))
   })
 
   it('puts the same cross-track error on both branches', () => {

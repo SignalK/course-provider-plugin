@@ -55,8 +55,8 @@ export function calcs(src: SKPaths): CourseData {
   // GreatCircle
   const bearingTrackTrue = g.trackBearingGcRad
   const bearingTrue = g.bearingGcRad
-  const bearingTrackMagnetic = wrap2Pi(bearingTrackTrue + magVar)
-  const bearingMagnetic = wrap2Pi(bearingTrue + magVar)
+  const bearingTrackMagnetic = wrap2Pi(bearingTrackTrue - magVar)
+  const bearingMagnetic = wrap2Pi(bearingTrue - magVar)
   const gcDistance = g.distanceGc
   const gcVmc = vmc(src, bearingTrue, 'true') // for ETA, TTG - prefer 'true' values
   const gcTime = timeCalcs(src, gcDistance, gcVmc as number, false)
@@ -86,8 +86,8 @@ export function calcs(src: SKPaths): CourseData {
   // Rhumbline
   const rlBearingTrackTrue = g.trackBearingRlRad
   const rlBearingTrue = g.bearingRlRad
-  const rlBearingTrackMagnetic = wrap2Pi(rlBearingTrackTrue + magVar)
-  const rlBearingMagnetic = wrap2Pi(rlBearingTrue + magVar)
+  const rlBearingTrackMagnetic = wrap2Pi(rlBearingTrackTrue - magVar)
+  const rlBearingMagnetic = wrap2Pi(rlBearingTrue - magVar)
   const rlDistance = g.distanceRl
   const rlVmc = vmc(src, rlBearingTrue, 'true')
   const rlTime = timeCalcs(src, rlDistance, rlVmc as number, true)
